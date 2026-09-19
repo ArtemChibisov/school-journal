@@ -201,6 +201,9 @@ LOGGING = {
         "app_file": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": str(LOG_FILE),
+            # Without this the file is opened in the machine locale encoding, and on
+            # Windows that is cp1252: any Cyrillic log line is then lost entirely.
+            "encoding": "utf-8",
             "maxBytes": 5 * 1024 * 1024,
             "backupCount": 3,
             "level": "INFO",
@@ -209,6 +212,9 @@ LOGGING = {
         "job_errors_file": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": str(JOB_ERRORS_LOG_FILE),
+            # Without this the file is opened in the machine locale encoding, and on
+            # Windows that is cp1252: any Cyrillic log line is then lost entirely.
+            "encoding": "utf-8",
             "maxBytes": 5 * 1024 * 1024,
             "backupCount": 5,
             "level": "ERROR",
