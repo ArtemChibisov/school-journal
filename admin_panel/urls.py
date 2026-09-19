@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from django.views.generic import RedirectView
 from jobs.views import (
@@ -16,6 +17,12 @@ from admin_panel.monitoring_views import healthz, readyz
 urlpatterns = [
     path("", RedirectView.as_view(pattern_name="journal_links:list_links", permanent=False), name="dashboard"),
     path("admin/", admin.site.urls),
+    path(
+        "accounts/login/",
+        auth_views.LoginView.as_view(template_name="registration/login.html"),
+        name="login",
+    ),
+    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("healthz", healthz, name="healthz"),
     path("readyz", readyz, name="readyz"),
     path("telegram/webhook/", telegram_webhook, name="telegram_webhook"),
