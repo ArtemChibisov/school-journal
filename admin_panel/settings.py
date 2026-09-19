@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "webapp",
     "notifications",
     "school_years.apps.SchoolYearsConfig",
+    "google_integration.apps.GoogleIntegrationConfig",
 ]
 
 MIDDLEWARE = [
@@ -217,6 +218,7 @@ LOGGING = {
         "pipeline": {"handlers": ["console", "app_file", "job_errors_file"], "level": "INFO", "propagate": False},
         "validation": {"handlers": ["console", "app_file", "job_errors_file"], "level": "INFO", "propagate": False},
         "notifications": {"handlers": ["console", "app_file", "job_errors_file"], "level": "INFO", "propagate": False},
+        "google_integration": {"handlers": ["console", "app_file", "job_errors_file"], "level": "INFO", "propagate": False},
     },
 }
 

@@ -57,6 +57,9 @@
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/runs/' in request.path %}active{% endif %}" href="{% url 'job_run_list' %}">Запуски</a>
               {% endif %}
+              {% if perms.jobs.view_jobrun %}
+                <a class="nav-link {% if '/google/' in request.path %}active{% endif %}" href="{% url 'google_integration:google_status' %}">Google-подключение</a>
+              {% endif %}
               <a class="nav-link {% if '/healthz' in request.path or '/readyz' in request.path %}active{% endif %}" href="{% url 'readyz' %}">Мониторинг</a>
             </nav>
           </div>

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block page_title %}Google-подключение{% endblock %}
+{% block page_heading %}Google-подключение{% endblock %}
+
+{% block page_actions %}
+  {% if perms.journal_links.change_classsheetlink %}
+    <form method="post" action="{% url 'journal_links:start_google_oauth' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button class="btn {% if status.is_ready %}btn-outline-success{% else %}btn-outline-primary{% endif %}" type="submit">
+        {% if status.is_ready %}Обновить Google-токен{% else %}Подключить Google{% endif %}
+      </button>
+    </form>
+    {% if school_year %}
+      <form method="post" action="{% url 'google_integration:run_access_preflight' %}">
+        {% csrf_token %}
+        <input type="hidden" name="school_year" value="{{ school_year.pk }}">
+        <button class="btn btn-primary" type="submit">Проверить доступы</button>
+      </form>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Текущая учётка</h2>
+
+    {% if status.is_ready %}
+      <div class="alert alert-success mb-3">Google подключён, операции с Drive и Sheets возможны.</div>
+    {% else %}
+      <div class="alert alert-warning mb-3">{{ status.blocker }}</div>
+    {% endif %}
+
+    <dl class="row mb-0">
+      <dt class="col-sm-4">Режим доступа</dt>
+      <dd class="col-sm-8"><code>{{ status.mode|default:"не задан" }}</code></dd>
+
+      {% if status.mode == "service_account" %}
+        <dt class="col-sm-4">Сервисный аккаунт</dt>
+        <dd class="col-sm-8">
+          {% if status.service_account_exists %}
+            {{ status.service_account_email|default:"файл на месте" }}
+          {% else %}
+            <span class="text-danger">файл не найден</span>
+          {% endif %}
+          <div class="text-secondary small">{{ status.service_account_path }}</div>
+        </dd>
+      {% else %}
+        <dt class="col-sm-4">client_secret.json</dt>
+        <dd class="col-sm-8">
+          {% if status.client_secret_exists %}на месте{% else %}<span class="text-danger">не найден</span>{% endif %}
+          <div class="text-secondary small">{{ status.client_secret_path }}</div>
+        </dd>
+
+        <dt class="col-sm-4">Токен</dt>
+        <dd class="col-sm-8">
+          {% if status.token_exists %}
+            {% if status.token_has_refresh_token %}есть refresh_token{% else %}<span class="text-danger">без refresh_token</span>{% endif %}
+            {% if status.token_expiry %}<span class="text-secondary">, истекает {{ status.token_expiry }}</span>{% endif %}
+          {% else %}
+            <span class="text-danger">не найден</span>
+          {% endif %}
+          <div class="text-secondary small">{{ status.token_path }}</div>
+        </dd>
+      {% endif %}
+    </dl>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+      <h2 class="h5 mb-0">Доступ к ссылкам учебного года</h2>
+      {% if status.last_preflight %}
+        <span class="text-secondary small">Последняя проверка: {{ status.last_preflight.finished_at|default:status.last_preflight.started_at }}</span>
+      {% endif %}
+    </div>
+
+    {% if school_years|length > 1 %}
+      <form method="get" class="d-flex gap-2 align-items-center mb-3">
+        <label class="form-label mb-0" for="school-year-select">Учебный год</label>
+        <select class="form-select w-auto" id="school-year-select" name="school_year" onchange="this.form.submit()">
+          {% for year in school_years %}
+            <option value="{{ year.pk }}" {% if school_year and year.pk == school_year.pk %}selected{% endif %}>{{ year }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    {% endif %}
+
+    {% if not school_year %}
+      <p class="mb-0 text-secondary">Учебный год ещё не создан. Создайте его, чтобы проверять доступы.</p>
+    {% elif not items %}
+      <p class="mb-0 text-secondary">Проверка доступов ещё не запускалась. Нажмите «Проверить доступы».</p>
+    {% else %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Что проверяли</th>
+              <th>Тип</th>
+              <th>Статус</th>
+              <th>Подробности</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td class="text-secondary small">{% if item.kind == "folder" %}папка{% else %}таблица{% endif %}</td>
+                <td>
+                  {% if item.status == "ok" %}
+                    <span class="badge text-bg-success">доступно</span>
+                  {% elif item.status == "failed" %}
+                    <span class="badge text-bg-danger">ошибка</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">не заполнено</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if item.status == "ok" %}
+                    {% if item.name %}{{ item.name }}{% endif %}
+                    {% if item.sheet_count %}<span class="text-secondary">листов: {{ item.sheet_count }}</span>{% endif %}
+                    {% if item.url %}<a class="ms-2" href="{{ item.url }}" target="_blank" rel="noopener">открыть</a>{% endif %}
+                  {% elif item.status == "failed" %}
+                    <span class="text-danger">{{ item.user_message }}</span>
+                  {% else %}
+                    <span class="text-secondary">ссылка не указана в настройках года</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if perms.jobs.view_jobrun and status.last_preflight %}
+        <p class="mt-3 mb-0 small">
+          <a href="{% url 'job_run_detail' status.last_preflight.id %}">Технические логи проверки</a>
+        </p>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
