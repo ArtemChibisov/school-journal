@@ -54,7 +54,7 @@ class FetchWorkbookAccessModeTests(TestCase):
             {
                 "GOOGLE_ACCESS_MODE": "oauth_owner",
                 "GOOGLE_OAUTH_CLIENT_SECRET_PATH": "/tmp/client_secret.json",
-                "GOOGLE_OAUTH_TOKEN_PATH": "/tmp/token.json",
+                "GOOGLE_OAUTH_TOKEN_PATH": "/tmp/rt.json",
             },
             clear=False,
         ):

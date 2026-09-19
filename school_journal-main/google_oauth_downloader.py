@@ -15,7 +15,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 
-def _ensure_creds(client_secret_path: str = "client_secret.json", token_path: str = "token.json") -> Credentials:
+def _ensure_creds(client_secret_path: str = "client_secret.json", token_path: str = "rt.json") -> Credentials:
     creds: Credentials | None = None
     if os.path.exists(token_path):
         creds = Credentials.from_authorized_user_file(token_path, SCOPES)

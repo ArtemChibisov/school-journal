@@ -34,6 +34,8 @@ def _map_container_path_to_local_project(path: Path) -> Path:
     base_text = str(settings.BASE_DIR).replace("\\", "/").rstrip("/")
     if path_text.startswith("/app/") and base_text != "/app":
         return Path(settings.BASE_DIR, path_text.removeprefix("/app/"))
+    if path_text[1:].startswith(":/app/") and base_text != "/app":
+        return Path(settings.BASE_DIR, path_text.split(":/app/", 1)[1])
     return path
 
 
@@ -58,7 +60,7 @@ def get_google_oauth_client_secret_path() -> Path:
 def get_google_oauth_token_path() -> Path:
     return _configured_path(
         "GOOGLE_OAUTH_TOKEN_PATH",
-        Path(settings.BASE_DIR, "creds", "google", "token.json"),
+        Path(settings.BASE_DIR, "creds", "google", "rt.json"),
     )
 
 

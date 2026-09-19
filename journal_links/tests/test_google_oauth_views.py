@@ -9,6 +9,7 @@ from admin_panel.google_oauth import (
     GOOGLE_OAUTH_CODE_VERIFIER_SESSION_KEY,
     GOOGLE_OAUTH_NEXT_SESSION_KEY,
     GOOGLE_OAUTH_STATE_SESSION_KEY,
+    _map_container_path_to_local_project,
 )
 
 
@@ -44,7 +45,7 @@ class GoogleOAuthViewsTests(TestCase):
         self.assertEqual(self.client.session[GOOGLE_OAUTH_NEXT_SESSION_KEY], "/links/")
         mocked_builder.assert_called_once_with(ANY)
 
-    @patch("journal_links.views.complete_google_oauth", return_value=Path("creds/google/token.json"))
+    @patch("journal_links.views.complete_google_oauth", return_value=Path("creds/google/rt.json"))
     def test_google_oauth_callback_saves_token_and_clears_session(self, mocked_complete):
         self._grant("change_classsheetlink")
         self.client.force_login(self.user)
@@ -81,3 +82,10 @@ class GoogleOAuthViewsTests(TestCase):
         self.assertNotIn(GOOGLE_OAUTH_CODE_VERIFIER_SESSION_KEY, self.client.session)
         self.assertNotIn(GOOGLE_OAUTH_NEXT_SESSION_KEY, self.client.session)
         mocked_complete.assert_not_called()
+
+
+class GoogleOAuthPathTests(TestCase):
+    def test_maps_container_app_path_to_local_project_on_windows(self):
+        mapped = _map_container_path_to_local_project(Path("C:/app/creds/google/client_secret.json"))
+
+        self.assertEqual(mapped, Path("creds/google/client_secret.json").resolve())

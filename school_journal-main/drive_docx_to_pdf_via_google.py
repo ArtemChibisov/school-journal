@@ -19,7 +19,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaInMemoryUpload
 from googleapiclient.errors import HttpError
 
-# используем твой модуль OAuth (client_secret.json + token.json)
+# используем твой модуль OAuth (client_secret.json + rt.json)
 from google_oauth_downloader import _ensure_creds, SCOPES as DL_SCOPES  # type: ignore
 
 MIME_FOLDER = "application/vnd.google-apps.folder"

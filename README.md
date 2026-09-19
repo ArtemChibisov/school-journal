@@ -75,7 +75,7 @@ tail -n 100 logs/jobs_errors.log
 - `static_data` → `/app/staticfiles`
 - `media_data` → `/app/media`
 - `logs_data` → `/app/logs`
-- `./creds` → `/app/creds` (OAuth callback writes `token.json` here)
+- `./creds` → `/app/creds` (OAuth callback writes `rt.json` here)
 
 Быстрые проверки:
 ```bash

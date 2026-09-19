@@ -5,7 +5,7 @@
   <ROOT>/<CLASS>/<файлы.docx>
 
 Использует те же OAuth-учётки, что и твой google_oauth_downloader.py
-(client_secret.json + token.json).
+(client_secret.json + rt.json).
 """
 
 import os
@@ -25,7 +25,7 @@ DEFAULT_DRIVE_ROOT = "1EWQ3fTwkvlbfgzq-vOSt_U7kLA1ddJfS"
 def get_drive_service():
     """
     1) Насильно включаем полный скоуп Drive у твоего oauth-модуля.
-    2) Если token.json создан со старыми скоупами — удаляем, чтобы пройти re-consent.
+    2) Если rt.json создан со старыми скоупами — удаляем, чтобы пройти re-consent.
     3) Строим сервис с поддержкой Shared Drives.
     """
     from google_oauth_downloader import _ensure_creds, SCOPES as DL_SCOPES  # type: ignore
@@ -41,10 +41,10 @@ def get_drive_service():
         token_paths.append(DL_TOKEN_PATH)
     except Exception:
         pass
-    # частые места, где лежит token.json
+    # частые места, где лежит rt.json
     token_paths += [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.json"),
-        "token.json",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "rt.json"),
+        "rt.json",
     ]
     for p in token_paths:
         try:

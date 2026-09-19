@@ -77,7 +77,7 @@ jobs:
         run: python manage.py check
 
       - name: Django tests
-        run: python manage.py test journal_links jobs pipeline validation notifications
+        run: python manage.py test journal_links jobs pipeline validation notifications school_years
 
   deploy:
     runs-on: ubuntu-latest
@@ -134,9 +134,9 @@ jobs:
           git fetch --all --prune
           git checkout main
           git pull --ff-only origin main
-          if [ "$DEPLOY_COMPOSE_FILE" = "docker-compose.server.yml" ]; then
-            cp docker-compose.prod.yml "$DEPLOY_COMPOSE_FILE"
-            sed -i 's/"80:80"/"8082:80"/' "$DEPLOY_COMPOSE_FILE"
+          if [ ! -f "$DEPLOY_COMPOSE_FILE" ]; then
+            echo "$DEPLOY_COMPOSE_FILE is missing in $DEPLOY_PATH"
+            exit 1
           fi
           if ! docker compose -f "$DEPLOY_COMPOSE_FILE" config --services | grep -qx scheduler; then
             echo "scheduler service is missing in $DEPLOY_COMPOSE_FILE"

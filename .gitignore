@@ -33,3 +33,7 @@ db.sqlite3
 staticfiles/
 media/
 output/
+
+# OAuth refresh token file (any name we use for it)
+rt.json
+**/rt.json
