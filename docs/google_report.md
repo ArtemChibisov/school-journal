@@ -53,7 +53,7 @@ Report export needs write access to Google Sheets. The OAuth token must include:
 - `https://www.googleapis.com/auth/drive`
 - `https://www.googleapis.com/auth/spreadsheets`
 
-If report update fails with insufficient scopes, recreate `creds/google/token.json` locally through `Подключить Google`, then copy the new token to the production credentials volume. Do not commit `token.json` or `client_secret.json`.
+If report update fails with insufficient scopes, recreate `creds/google/rt.json` locally through `Подключить Google`, then copy the new token to the production credentials volume. Do not commit `rt.json` or `client_secret.json`.
 
 ## Runtime Behavior
 

@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "pipeline",
     "webapp",
     "notifications",
+    "school_years.apps.SchoolYearsConfig",
 ]
 
 MIDDLEWARE = [
@@ -158,6 +159,13 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+
+# Behind a TLS-terminating reverse proxy the app receives plain HTTP, so Django must be told
+# to trust the proxy headers. Enable only when a trusted proxy sets them; otherwise a client
+# could spoof X-Forwarded-Proto.
+if env_bool("DJANGO_TRUST_PROXY_HEADERS", False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

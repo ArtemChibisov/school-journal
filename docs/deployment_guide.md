@@ -52,10 +52,10 @@ The app mounts `/app/creds` as a persistent Docker volume named `creds_data`. If
 Expected production paths:
 
 - `/app/creds/google/client_secret.json`
-- `/app/creds/google/token.json`
+- `/app/creds/google/rt.json`
 - `/app/creds/service_account.json`
 
-Descriptor/criteria Google report export rewrites an existing Google Spreadsheet after each check run. Configure the target URL in the admin panel at `Классы и таблицы` -> `Google-отчет`. The OAuth token used by the app must include Google Sheets write access. If the report update fails with insufficient scopes, recreate `token.json` through the local Google OAuth flow and copy it into the production credentials volume again. See `docs/google_report.md`.
+Descriptor/criteria Google report export rewrites an existing Google Spreadsheet after each check run. Configure the target URL in the admin panel at `Классы и таблицы` -> `Google-отчет`. The OAuth token used by the app must include Google Sheets write access. If the report update fails with insufficient scopes, recreate `rt.json` through the local Google OAuth flow and copy it into the production credentials volume again. See `docs/google_report.md`.
 
 AI criteria review can also rewrite a separate Google Spreadsheet after each AI run. Configure it in the admin panel at `AI-вычитка критериев` -> `Google AI-отчет`. This report is separate from the descriptor/criteria/grades report and uses class sheets with AI verdicts and rewrite suggestions.
 

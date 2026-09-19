@@ -89,6 +89,32 @@ Required columns:
 
 Observed rows use `yes` in `is_active`; `notes` is currently empty in the observed data.
 
+### 5.1 Pending Column: `student_id`
+
+Added after the customer meeting on 2026-08-31. Not present in the observed source yet.
+
+The customer described a student as `full name + class + grade + internal ID` and expects the
+internal ID to be the link used across the whole system.
+
+| Column | Header | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| F | `student_id` | string | yes, once introduced | Stable internal student identifier. Unique across the school year. |
+
+Rules, once the column exists:
+- `student_id` is the authoritative key for a student, not `student_name`;
+- `student_id` must be stable across modules and across a rename of the student;
+- `student_name` stays in the sheet as a display value;
+- generated reports are keyed by `student_id`, see `school_years.ReportArtifact`.
+
+Open questions for the customer:
+- the exact format and the source of `student_id`;
+- whether a student can carry a `grade` different from the `grade_number` of the class;
+  currently `grade_number` is defined on the class only.
+
+Until the column is confirmed and filled, the parser keeps using
+`class_code + normalized student_name` as the fallback key, and the preflight report must warn
+that the fallback is in use.
+
 Example:
 
 | class_code | student_order | student_name | is_active | notes |
