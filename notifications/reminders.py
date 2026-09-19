@@ -134,14 +134,14 @@ def _build_teacher_message(payload: dict) -> str:
     lines.append(f"⚠️ Невалидные критерии и как исправить (до {TOP_INVALID_CRITERIA_LIMIT}):")
     for entry in invalid_entries[:TOP_INVALID_CRITERIA_LIMIT]:
         suggestion = _clean_str(entry.get("ai_fix_suggestion")) or _clean_str(entry.get("ai_why"))
-    if not suggestion:
-        suggestion = "Уточните формулировку критерия и запустите проверку повторно."
-    lines.append(
-        "• "
-        f"{_entry_location(entry)} · M{entry['module_number']} — "
-        f"{_criterion_preview(entry['criterion_text'])}"
-    )
-    lines.append(f"  ↳ Подсказка AI: {_criterion_preview(suggestion, max_len=180)}")
+        if not suggestion:
+            suggestion = "Уточните формулировку критерия и запустите проверку повторно."
+        lines.append(
+            "• "
+            f"{_entry_location(entry)} · M{entry['module_number']} — "
+            f"{_criterion_preview(entry['criterion_text'])}"
+        )
+        lines.append(f"  ↳ Подсказка AI: {_criterion_preview(suggestion, max_len=180)}")
 
     lines.append("Пожалуйста, исправьте невалидные критерии и подтвердите обновление.")
     return "\n".join(lines)

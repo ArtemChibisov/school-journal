@@ -95,6 +95,17 @@ class SendValidationRemindersTests(TestCase):
         self.assertIn("6B / Physics", message_text)
         self.assertEqual(NotificationEvent.objects.filter(job_run=self.job_run).count(), 2)
 
+    @patch("notifications.reminders.send_telegram")
+    def test_message_lists_every_invalid_criterion(self, send_telegram_mock):
+        TeacherContact.objects.create(name="Teacher A", chat_id="111", is_active=True)
+
+        send_validation_reminders_for_job(self.job_run)
+
+        message_text = send_telegram_mock.call_args.args[1]
+        self.assertIn("Понимает геометрию", message_text)
+        self.assertIn("Пустой критерий", message_text)
+        self.assertIn("Добавьте измеримый глагол", message_text)
+        self.assertIn("Формулировка не содержит проверяемого действия", message_text)
 
     @patch("notifications.reminders.send_telegram", side_effect=TelegramSendError("boom"))
     def test_logs_errors_when_telegram_fails(self, _send_telegram_mock):
