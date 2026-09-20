@@ -29,6 +29,7 @@ urlpatterns = [
     path("", include("journal_links.urls")),
     path("", include("pipeline.urls")),
     path("", include("google_integration.urls")),
+    path("", include("school_years.urls")),
     path("runs/", list_job_runs, name="job_run_list"),
     path("runs/full-pipeline/start/", run_full_pipeline_view, name="run_full_pipeline"),
     path("runs/check-missing-data/start/", run_missing_data_check_view, name="run_missing_data_check"),
