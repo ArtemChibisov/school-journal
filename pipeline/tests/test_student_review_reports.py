@@ -44,10 +44,12 @@ class StudentReviewReportsViewTests(TestCase):
         response = self.client.get(reverse("pipeline:student_review_reports"))
 
         self.assertEqual(response.status_code, 200)
-        page = response.content.decode("utf-8")
-        self.assertIn("Отчеты на проверку", page)
-        self.assertIn("4A", page)
-        self.assertNotIn("5B", page)
+        self.assertIn("Отчеты на проверку", response.content.decode("utf-8"))
+
+        # Assert on the offered choices, not on the whole page: a class code as short as "5B"
+        # collides with the random CSRF token often enough to make the test flaky.
+        offered = [str(link) for link in response.context["form"].fields["class_sheet_link"].queryset]
+        self.assertEqual(offered, ["4A — Math"])
 
     @patch("pipeline.views.enqueue_prepare_student_review_reports_job")
     def test_manual_post_creates_job_with_selected_params(self, mock_enqueue):
