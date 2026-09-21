@@ -14,6 +14,7 @@ from .errors import CATEGORY_NOT_FOUND, GoogleIntegrationError
 
 MIME_FOLDER = "application/vnd.google-apps.folder"
 MIME_SPREADSHEET = "application/vnd.google-apps.spreadsheet"
+MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 FILE_FIELDS = "id,name,mimeType,webViewLink,parents,trashed"
 
@@ -30,7 +31,11 @@ class DriveClient(Protocol):
 
     def create_folder(self, parent_id: str, name: str) -> dict: ...
 
-    def copy_file(self, file_id: str, *, parent_id: str, name: str) -> dict: ...
+    def copy_file(
+        self, file_id: str, *, parent_id: str, name: str, mime_type: str | None = None
+    ) -> dict: ...
+
+    def move_file(self, file_id: str, *, new_parent_id: str, old_parent_id: str) -> dict: ...
 
     def trash_file(self, file_id: str) -> None: ...
 
@@ -124,12 +129,32 @@ class ApiDriveClient:
                 .execute()
             )
 
-    def copy_file(self, file_id: str, *, parent_id: str, name: str) -> dict:
+    def copy_file(
+        self, file_id: str, *, parent_id: str, name: str, mime_type: str | None = None
+    ) -> dict:
         body = {"name": name, "parents": [parent_id]}
+        if mime_type:
+            # Drive converts on copy when the target type differs, which is how an
+            # uploaded .xlsx becomes a native Google Sheet without a download round trip.
+            body["mimeType"] = mime_type
         with guard("drive.files.copy", file_id=file_id, parent_id=parent_id, name=name):
             return (
                 self.service.files()
                 .copy(fileId=file_id, body=body, fields=FILE_FIELDS, supportsAllDrives=True)
+                .execute()
+            )
+
+    def move_file(self, file_id: str, *, new_parent_id: str, old_parent_id: str) -> dict:
+        with guard("drive.files.update", file_id=file_id, parent_id=new_parent_id):
+            return (
+                self.service.files()
+                .update(
+                    fileId=file_id,
+                    addParents=new_parent_id,
+                    removeParents=old_parent_id,
+                    fields=FILE_FIELDS,
+                    supportsAllDrives=True,
+                )
                 .execute()
             )
 

@@ -94,13 +94,23 @@ class FakeDriveClient:
         new_id = self.add_folder(name, parent_id=parent_id)
         return dict(self.files[new_id])
 
-    def copy_file(self, file_id: str, *, parent_id: str, name: str) -> dict:
-        self.calls.append(("copy_file", (file_id, parent_id, name)))
+    def copy_file(
+        self, file_id: str, *, parent_id: str, name: str, mime_type: str | None = None
+    ) -> dict:
+        self.calls.append(("copy_file", (file_id, parent_id, name, mime_type)))
         source = self.files.get(file_id)
         if source is None or source["trashed"]:
             raise _not_found(file_id)
-        new_id = self.add_file(name, parent_id=parent_id, mime_type=source["mimeType"])
+        new_id = self.add_file(name, parent_id=parent_id, mime_type=mime_type or source["mimeType"])
         return dict(self.files[new_id])
+
+    def move_file(self, file_id: str, *, new_parent_id: str, old_parent_id: str) -> dict:
+        self.calls.append(("move_file", (file_id, new_parent_id, old_parent_id)))
+        item = self.files.get(file_id)
+        if item is None or item["trashed"]:
+            raise _not_found(file_id)
+        item["parents"] = [p for p in item["parents"] if p != old_parent_id] + [new_parent_id]
+        return dict(item)
 
     def trash_file(self, file_id: str) -> None:
         self.calls.append(("trash_file", (file_id,)))
