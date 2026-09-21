@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block page_title %}Учебный год{% endblock %}
+{% block page_heading %}Учебный год{% endblock %}
+
+{% block page_actions %}
+  {% if school_year %}
+    <a class="btn btn-outline-secondary" href="{% url 'google_integration:google_status' %}?school_year={{ school_year.pk }}">Проверить доступы</a>
+    <a class="btn btn-outline-primary" href="{% url 'school_years:roster_import' %}?school_year={{ school_year.pk }}">Состав классов</a>
+  {% endif %}
+  {% if can_edit %}
+    <a class="btn btn-outline-secondary" href="?school_year=new">Создать новый год</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+{% if school_years %}
+  <form method="get" class="d-flex gap-2 align-items-center mb-4">
+    <label class="form-label mb-0" for="school-year-select">Показать</label>
+    <select class="form-select w-auto" id="school-year-select" name="school_year" onchange="this.form.submit()">
+      {% for year in school_years %}
+        <option value="{{ year.pk }}" {% if school_year and year.pk == school_year.pk %}selected{% endif %}>{{ year }}</option>
+      {% endfor %}
+      {% if not school_year %}<option value="new" selected>Новый учебный год</option>{% endif %}
+    </select>
+  </form>
+{% endif %}
+
+{% if school_year %}
+  {% if missing %}
+    <div class="alert alert-warning">
+      <strong>Год ещё не готов к созданию журналов.</strong>
+      Не хватает: {{ missing|join:", " }}.
+    </div>
+  {% else %}
+    <div class="alert alert-success">
+      Всё необходимое для создания журналов заполнено.
+      Ссылок указано {{ filled_count.0 }} из {{ filled_count.1 }}.
+    </div>
+  {% endif %}
+{% else %}
+  <div class="alert alert-info">
+    Заполните название и ссылки, затем сохраните. Обязательны только те, что нужны для создания
+    журналов: состав классов, предметы и преподаватели, шаблон и две корневые папки. Остальное
+    можно добавить позже.
+  </div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if school_year %}<input type="hidden" name="school_year" value="{{ school_year.pk }}">{% endif %}
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Основное</h2>
+
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+          {{ form.name }}
+          {% if form.name.help_text %}<div class="form-text">{{ form.name.help_text }}</div>{% endif %}
+          {% for error in form.name.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-center">
+          <div class="form-check mt-md-4">
+            {{ form.is_active }}
+            <label class="form-check-label ms-1" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+            <div class="form-text">{{ form.is_active.help_text }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Входные таблицы</h2>
+      <p class="text-secondary small">
+        Система читает эти таблицы сама. Вставьте ссылку прямо из адресной строки Google Sheets —
+        лишние параметры после адреса не мешают.
+      </p>
+
+      <div class="row g-3">
+        {% for field in sheet_fields %}
+          <div class="col-12">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Папки в Google Drive</h2>
+      <p class="text-secondary small">
+        Куда система складывает результат. Нужны ссылки на папки, а не на файлы.
+      </p>
+
+      <div class="row g-3">
+        {% for field in folder_fields %}
+          <div class="col-12 col-xl-6">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {% if can_edit %}
+    <div class="d-flex gap-2 mb-4">
+      <button class="btn btn-primary" type="submit">Сохранить</button>
+      {% if school_year %}
+        <a class="btn btn-outline-secondary" href="?school_year={{ school_year.pk }}">Отменить изменения</a>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="alert alert-secondary">У вас нет прав на изменение настроек. Страница доступна только для просмотра.</div>
+  {% endif %}
+</form>
+{% endblock %}
