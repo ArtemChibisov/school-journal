@@ -1,8 +1,11 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 import csv
 import json
 from django.views.decorators.http import require_POST
@@ -12,7 +15,8 @@ from validation.job_runner import run_check_missing_data_job
 
 from pipeline.full_pipeline_runner import run_full_pipeline
 
-from .models import JobRun
+from .labels import job_type_label, labelled_job_types
+from .models import JobLog, JobRun
 
 STATUS_UI_META = {
     JobRun.Status.PENDING: {"css": "queued", "label": "queued"},
@@ -186,6 +190,7 @@ def list_job_runs(request):
     page_obj = paginator.get_page(request.GET.get("page"))
     for run in page_obj:
         run.status_meta = _status_meta(run.status)
+        run.type_label = job_type_label(run.job_type)
 
     preserved_query = request.GET.copy()
     preserved_query.pop("page", None)
@@ -196,7 +201,9 @@ def list_job_runs(request):
         {
             "page_obj": page_obj,
             "status_choices": JobRun.Status.choices,
-            "job_type_choices": JobRun.objects.values_list("job_type", flat=True).distinct().order_by("job_type"),
+            "job_type_choices": labelled_job_types(
+                JobRun.objects.values_list("job_type", flat=True).distinct()
+            ),
             "filters": {
                 "status": status or "",
                 "job_type": job_type or "",
@@ -330,3 +337,98 @@ def send_reminders_view(request, run_id):
 def run_missing_data_check_view(request):
     job_run = run_check_missing_data_job(initiated_by=request.user if request.user.is_authenticated else None)
     return redirect("job_run_detail", run_id=job_run.id)
+
+
+# --- Журнал событий ---------------------------------------------------------
+#
+# Every job already writes JobLog rows, but until now they could only be read one run at a
+# time. This is the single stream: what the system did lately and what went wrong, without
+# having to guess which run to open or to read the log file on the server over ssh.
+
+LEVEL_PRESETS = {
+    "problems": [JobLog.Level.ERROR, JobLog.Level.WARNING],
+    "errors": [JobLog.Level.ERROR],
+    "all": [],
+}
+DEFAULT_LEVEL = "problems"
+
+PERIOD_PRESETS = {"day": 1, "week": 7, "month": 30, "all": None}
+DEFAULT_PERIOD = "week"
+
+# The same palette as the run statuses, so red means the same thing on both screens.
+LEVEL_UI_META = {
+    JobLog.Level.ERROR: {"css": "failed", "label": "ошибка"},
+    JobLog.Level.WARNING: {"css": "partial", "label": "предупреждение"},
+    JobLog.Level.INFO: {"css": "running", "label": "информация"},
+    JobLog.Level.DEBUG: {"css": "queued", "label": "отладка"},
+}
+
+EVENTS_PER_PAGE = 50
+
+
+def _preset(presets: dict, value: str | None, default: str) -> str:
+    return value if value in presets else default
+
+
+def _recent_counters() -> dict[str, int]:
+    since = timezone.now() - timedelta(hours=24)
+    logs = JobLog.objects.filter(ts__gte=since)
+    return {
+        "errors": logs.filter(level=JobLog.Level.ERROR).count(),
+        "warnings": logs.filter(level=JobLog.Level.WARNING).count(),
+        "runs": JobRun.objects.filter(started_at__gte=since).count(),
+    }
+
+
+@login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр журнала событий.")
+def event_log(request):
+    level = _preset(LEVEL_PRESETS, request.GET.get("level"), DEFAULT_LEVEL)
+    period = _preset(PERIOD_PRESETS, request.GET.get("period"), DEFAULT_PERIOD)
+
+    queryset = JobLog.objects.select_related("job_run").order_by("-ts", "-id")
+
+    levels = LEVEL_PRESETS[level]
+    if levels:
+        queryset = queryset.filter(level__in=levels)
+
+    days = PERIOD_PRESETS[period]
+    if days is not None:
+        queryset = queryset.filter(ts__gte=timezone.now() - timedelta(days=days))
+
+    job_type = _parse_non_empty(request.GET.get("job_type"))
+    if job_type:
+        queryset = queryset.filter(job_run__job_type=job_type)
+
+    query = _parse_non_empty(request.GET.get("q"))
+    if query:
+        queryset = queryset.filter(message__icontains=query)
+
+    paginator = Paginator(queryset, EVENTS_PER_PAGE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    for entry in page_obj:
+        entry.level_meta = LEVEL_UI_META.get(entry.level, {"css": "queued", "label": entry.level})
+        entry.job_label = job_type_label(entry.job_run.job_type)
+
+    preserved_query = request.GET.copy()
+    preserved_query.pop("page", None)
+
+    return render(
+        request,
+        "jobs/event_log.html",
+        {
+            "page_obj": page_obj,
+            "total_count": paginator.count,
+            "counters": _recent_counters(),
+            "job_type_choices": labelled_job_types(
+                JobRun.objects.values_list("job_type", flat=True).distinct()
+            ),
+            "filters": {
+                "level": level,
+                "period": period,
+                "job_type": job_type or "",
+                "q": query or "",
+            },
+            "querystring": preserved_query.urlencode(),
+        },
+    )

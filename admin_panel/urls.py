@@ -3,6 +3,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from django.views.generic import RedirectView
 from jobs.views import (
+    event_log,
     export_run_issues_csv,
     export_run_issues_json,
     job_run_detail,
@@ -30,6 +31,7 @@ urlpatterns = [
     path("", include("pipeline.urls")),
     path("", include("google_integration.urls")),
     path("", include("school_years.urls")),
+    path("logs/", event_log, name="event_log"),
     path("runs/", list_job_runs, name="job_run_list"),
     path("runs/full-pipeline/start/", run_full_pipeline_view, name="run_full_pipeline"),
     path("runs/check-missing-data/start/", run_missing_data_check_view, name="run_missing_data_check"),

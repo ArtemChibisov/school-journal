@@ -35,8 +35,8 @@
           <label class="form-label" for="id_job_type">Тип задачи</label>
           <select id="id_job_type" name="job_type" class="form-select">
             <option value="">Все</option>
-            {% for jt in job_type_choices %}
-              <option value="{{ jt }}" {% if filters.job_type == jt %}selected{% endif %}>{{ jt }}</option>
+            {% for value, label in job_type_choices %}
+              <option value="{{ value }}" {% if filters.job_type == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>
@@ -73,7 +73,10 @@
             {% for run in page_obj %}
               <tr>
                 <td>{{ run.id }}</td>
-                <td>{{ run.job_type }}</td>
+                <td>
+                  <div>{{ run.type_label }}</div>
+                  <div class="small text-secondary">{{ run.job_type }}</div>
+                </td>
                 <td><span class="badge badge-soft badge-{{ run.status_meta.css }}">{{ run.status_meta.label }}</span></td>
                 <td>{{ run.started_at|default:"—" }}</td>
                 <td>{{ run.finished_at|default:"—" }}</td>

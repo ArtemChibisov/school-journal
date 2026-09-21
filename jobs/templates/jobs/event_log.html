@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block page_title %}Журнал событий{% endblock %}
+{% block page_heading %}Журнал событий{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn-outline-secondary" href="?{{ querystring }}">Обновить</a>
+  <a class="btn btn-outline-secondary" href="{% url 'job_run_list' %}">Запуски</a>
+{% endblock %}
+
+{% block content %}
+  <section class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-secondary small">Ошибок за сутки</div>
+          <div class="h3 mb-0 {% if counters.errors %}text-danger{% endif %}">{{ counters.errors }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-secondary small">Предупреждений за сутки</div>
+          <div class="h3 mb-0 {% if counters.warnings %}text-warning{% endif %}">{{ counters.warnings }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-secondary small">Запусков за сутки</div>
+          <div class="h3 mb-0">{{ counters.runs }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-12 col-md-6 col-xl-3">
+          <label class="form-label" for="id_level">Что показывать</label>
+          <select id="id_level" name="level" class="form-select">
+            <option value="problems" {% if filters.level == "problems" %}selected{% endif %}>Ошибки и предупреждения</option>
+            <option value="errors" {% if filters.level == "errors" %}selected{% endif %}>Только ошибки</option>
+            <option value="all" {% if filters.level == "all" %}selected{% endif %}>Все события</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+          <label class="form-label" for="id_period">За период</label>
+          <select id="id_period" name="period" class="form-select">
+            <option value="day" {% if filters.period == "day" %}selected{% endif %}>Сутки</option>
+            <option value="week" {% if filters.period == "week" %}selected{% endif %}>Неделю</option>
+            <option value="month" {% if filters.period == "month" %}selected{% endif %}>Месяц</option>
+            <option value="all" {% if filters.period == "all" %}selected{% endif %}>Всё время</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+          <label class="form-label" for="id_job_type">Задача</label>
+          <select id="id_job_type" name="job_type" class="form-select">
+            <option value="">Любая</option>
+            {% for value, label in job_type_choices %}
+              <option value="{{ value }}" {% if filters.job_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+          <label class="form-label" for="id_q">Поиск по тексту</label>
+          <input id="id_q" type="search" name="q" value="{{ filters.q }}" class="form-control" placeholder="например, Google">
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-2">
+          <button class="btn btn-primary" type="submit">Применить</button>
+          <a class="btn btn-outline-secondary" href="{% url 'event_log' %}">Сбросить</a>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  {% if filters.level != "all" %}
+    <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <span>Показаны только события с проблемами. Обычные шаги работы скрыты.</span>
+      <a class="btn btn-sm btn-outline-secondary" href="?level=all&amp;period={{ filters.period }}{% if filters.job_type %}&amp;job_type={{ filters.job_type }}{% endif %}{% if filters.q %}&amp;q={{ filters.q }}{% endif %}">Показать все события</a>
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span class="fw-semibold">Найдено событий: {{ total_count }}</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width: 11rem;">Время</th>
+              <th style="width: 10rem;">Уровень</th>
+              <th style="width: 15rem;">Задача</th>
+              <th>Событие</th>
+              <th style="width: 7rem;">Запуск</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in page_obj %}
+              <tr>
+                <td class="text-nowrap">{{ entry.ts|date:"d.m.Y H:i:s" }}</td>
+                <td><span class="badge badge-soft badge-{{ entry.level_meta.css }}">{{ entry.level_meta.label }}</span></td>
+                <td>{{ entry.job_label }}</td>
+                <td>
+                  <div>{{ entry.message }}</div>
+                  {% if entry.context_json %}
+                    <details class="mt-1">
+                      <summary class="small text-secondary">Подробности для администратора</summary>
+                      <pre class="mt-2 mb-0 small">{{ entry.context_json }}</pre>
+                    </details>
+                  {% endif %}
+                </td>
+                <td>
+                  <a class="btn btn-outline-secondary btn-sm" href="{% url 'job_run_detail' entry.job_run_id %}">Открыть</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="table-empty" colspan="5">За выбранный период событий нет.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+      <div class="card-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="text-secondary small">Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</div>
+        <div class="d-flex gap-2">
+          {% if page_obj.has_previous %}
+            <a class="btn btn-outline-secondary btn-sm" href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Назад</a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a class="btn btn-outline-secondary btn-sm" href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Вперёд</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

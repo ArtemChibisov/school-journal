@@ -62,6 +62,7 @@
               {% endif %}
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/runs/' in request.path %}active{% endif %}" href="{% url 'job_run_list' %}">Запуски</a>
+                <a class="nav-link {% if '/logs/' in request.path %}active{% endif %}" href="{% url 'event_log' %}">Журнал событий</a>
               {% endif %}
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/school-year/' in request.path %}active{% endif %}" href="{% url 'school_years:school_year_settings' %}">Учебный год</a>
