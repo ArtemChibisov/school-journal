@@ -17,6 +17,7 @@ from admin_panel.authz import permission_required_403
 from google_integration.errors import GoogleIntegrationError
 from google_integration.status import build_clients
 from jobs.models import JobRun
+from journal_links.models import DescriptorCriteriaReportTarget
 
 from .forms import (
     FOLDER_FIELDS,
@@ -51,6 +52,33 @@ def _latest_import(school_year_id: int | None) -> JobRun | None:
     return queryset.order_by("-started_at").first()
 
 
+
+def _sync_monitoring_target(school_year) -> None:
+    """Point the legacy report target at the year's monitoring spreadsheet.
+
+    The fill-check export writes to `DescriptorCriteriaReportTarget`, configured on a separate
+    legacy screen. Asking the завуч to paste the same link in two places is a way to end up
+    with two different links, so the year settings own it and this keeps the old setting in
+    step. Same bridge idea as the class sheet links - see docs/execution_plan.md.
+    """
+
+    url = (school_year.monitoring_sheet_url or "").strip()
+    if not url:
+        return
+
+    target = DescriptorCriteriaReportTarget.objects.filter(is_active=True).first()
+    if target is None:
+        DescriptorCriteriaReportTarget.objects.create(
+            name=f"Заполняемость {school_year}",
+            google_sheet_url=url,
+            is_active=True,
+        )
+        return
+
+    if target.google_sheet_url != url:
+        target.google_sheet_url = url
+        target.save()
+
 @login_required
 @permission_required_403(VIEW_PERMISSION)
 def school_year_settings(request):
@@ -70,6 +98,7 @@ def school_year_settings(request):
                 saved.created_by = request.user
             saved.updated_by = request.user
             saved.save()
+            _sync_monitoring_target(saved)
             messages.success(request, "Настройки учебного года сохранены.")
             return redirect(f"{reverse('school_years:school_year_settings')}?school_year={saved.pk}")
         messages.error(request, "Настройки не сохранены: проверьте отмеченные поля.")

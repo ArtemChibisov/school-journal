@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from google_integration.ids import folder_url, spreadsheet_url
+from journal_links.models import DescriptorCriteriaReportTarget
 from school_years.forms import SchoolYearForm, filled_link_count, missing_for_generation
 from school_years.models import SchoolYear
 
@@ -204,3 +205,60 @@ class SchoolYearSettingsViewTests(TestCase):
 
         self.assertIsNone(response.context["school_year"])
         self.assertNotContains(response, ROSTER_URL)
+
+
+class MonitoringTargetBridgeTests(TestCase):
+    """Saving the year must keep the legacy export target in step with it."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("zavuch", password="bridge-tests")
+        self.user.user_permissions.add(
+            *Permission.objects.filter(codename__in=["view_jobrun", "change_classsheetlink"])
+        )
+        self.user = get_user_model().objects.get(pk=self.user.pk)
+        self.client.force_login(self.user)
+        self.url = reverse("school_years:school_year_settings")
+        self.monitoring = spreadsheet_url("1MUzMjIYgbdTQjx2IJJTTt36qV-Ci1ml-H1o_dEoKBh8")
+
+    def _post(self, monitoring_url, school_year=None):
+        data = {"name": "26/27", "monitoring_sheet_url": monitoring_url}
+        if school_year:
+            data["school_year"] = school_year.pk
+        return self.client.post(self.url, data)
+
+    def test_creates_the_target_when_there_is_none(self):
+        self._post(self.monitoring)
+
+        target = DescriptorCriteriaReportTarget.objects.get()
+        self.assertEqual(target.google_sheet_url, self.monitoring)
+        self.assertTrue(target.is_active)
+
+    def test_updates_the_existing_target(self):
+        DescriptorCriteriaReportTarget.objects.create(
+            name="Старый", google_sheet_url=spreadsheet_url("old-spreadsheet-id"), is_active=True
+        )
+
+        self._post(self.monitoring)
+
+        self.assertEqual(DescriptorCriteriaReportTarget.objects.count(), 1)
+        self.assertEqual(DescriptorCriteriaReportTarget.objects.get().google_sheet_url, self.monitoring)
+
+    def test_empty_monitoring_link_leaves_the_target_alone(self):
+        DescriptorCriteriaReportTarget.objects.create(
+            name="Старый", google_sheet_url=spreadsheet_url("old-spreadsheet-id"), is_active=True
+        )
+
+        self._post("")
+
+        self.assertEqual(
+            DescriptorCriteriaReportTarget.objects.get().google_sheet_url,
+            spreadsheet_url("old-spreadsheet-id"),
+        )
+
+    def test_saving_twice_does_not_multiply_targets(self):
+        self._post(self.monitoring)
+        year = SchoolYear.objects.get()
+
+        self._post(self.monitoring, school_year=year)
+
+        self.assertEqual(DescriptorCriteriaReportTarget.objects.count(), 1)
