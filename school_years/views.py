@@ -21,12 +21,14 @@ from jobs.models import JobRun
 from .forms import (
     FOLDER_FIELDS,
     SPREADSHEET_FIELDS,
+    SchoolModuleForm,
     SchoolYearForm,
     filled_link_count,
     missing_for_generation,
 )
+from .imports.registers import JOB_TYPE as SCAN_JOB_TYPE, run_register_scan
 from .imports.roster_sync import JOB_TYPE as ROSTER_JOB_TYPE, import_class_roster
-from .models import ClassGroup, SchoolYear
+from .models import ClassGroup, ClassRegister, SchoolModule, SchoolYear
 
 VIEW_PERMISSION = "jobs.view_jobrun"
 RUN_PERMISSION = "journal_links.change_classsheetlink"
@@ -162,4 +164,114 @@ def run_roster_import(request):
     else:
         messages.success(request, f"{prefix} завершён: классов без ошибок {valid}, проблем нет.")
 
+    return redirect(target)
+
+
+def _selected_module(request, school_year):
+    if school_year is None:
+        return None
+    raw = (request.POST.get("module") or request.GET.get("module") or "").strip()
+    if raw == "new":
+        return None
+    if raw:
+        return SchoolModule.objects.filter(pk=raw, school_year=school_year).first()
+    return SchoolModule.objects.filter(school_year=school_year).order_by("number").first()
+
+
+def _latest_scan(module_id: int | None) -> JobRun | None:
+    queryset = JobRun.objects.filter(job_type=SCAN_JOB_TYPE)
+    if module_id is not None:
+        queryset = queryset.filter(params_json__module_id=module_id)
+    return queryset.order_by("-started_at").first()
+
+
+@login_required
+@permission_required_403(VIEW_PERMISSION)
+def module_registers(request):
+    """Module dates and folders, plus the journals found inside those folders."""
+
+    school_year = _selected_school_year(request)
+    module = _selected_module(request, school_year)
+    can_edit = request.user.has_perm(RUN_PERMISSION)
+
+    if request.method == "POST":
+        if not can_edit:
+            return HttpResponseForbidden("Доступ запрещён: недостаточно прав для изменения настроек.")
+        if school_year is None:
+            messages.error(request, "Сначала создайте учебный год.")
+            return redirect(reverse("school_years:module_registers"))
+
+        form = SchoolModuleForm(request.POST, instance=module, school_year=school_year)
+        if form.is_valid():
+            saved = form.save(commit=False)
+            saved.school_year = school_year
+            saved.save()
+            messages.success(request, "Модуль сохранён.")
+            return redirect(
+                f"{reverse('school_years:module_registers')}?school_year={school_year.pk}&module={saved.pk}"
+            )
+        messages.error(request, "Модуль не сохранён: проверьте отмеченные поля.")
+    else:
+        form = SchoolModuleForm(instance=module, school_year=school_year)
+
+    last_run = _latest_scan(module.pk if module else None)
+    result = (last_run.result_json if last_run else {}) or {}
+
+    return render(
+        request,
+        "school_years/module_registers.html",
+        {
+            "form": form,
+            "school_year": school_year,
+            "school_years": SchoolYear.objects.all(),
+            "module": module,
+            "modules": SchoolModule.objects.filter(school_year=school_year) if school_year else [],
+            "can_edit": can_edit,
+            "last_run": last_run,
+            "result": result,
+            "registers": (
+                ClassRegister.objects.filter(module=module)
+                .select_related("class_group")
+                .order_by("class_group__grade_number", "class_group__class_code")
+                if module
+                else ClassRegister.objects.none()
+            ),
+        },
+    )
+
+
+@login_required
+@permission_required_403(RUN_PERMISSION)
+@require_POST
+def run_register_scan_view(request):
+    school_year = _selected_school_year(request)
+    module = _selected_module(request, school_year)
+    redirect_url = reverse("school_years:module_registers")
+    dry_run = request.POST.get("dry_run") == "1"
+
+    if module is None:
+        messages.error(request, "Сначала сохраните модуль.")
+        return redirect(redirect_url)
+
+    target = f"{redirect_url}?school_year={school_year.pk}&module={module.pk}"
+
+    try:
+        drive, _ = build_clients()
+    except GoogleIntegrationError as exc:
+        messages.error(request, exc.user_message)
+        return redirect(target)
+
+    job_run = run_register_scan(module, drive=drive, initiated_by=request.user, dry_run=dry_run)
+
+    result = job_run.result_json or {}
+    if "error" in result:
+        messages.error(request, result["error"]["user_message"])
+        return redirect(target)
+
+    prefix = "Поиск" if dry_run else "Привязка"
+    messages.success(
+        request,
+        f"{prefix} завершён: найдено журналов {result.get('matched_total', 0)} "
+        f"из {result.get('classes_total', 0)}.",
+    )
     return redirect(target)

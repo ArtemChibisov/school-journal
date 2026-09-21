@@ -12,7 +12,7 @@ from django import forms
 from google_integration.errors import GoogleIntegrationError
 from google_integration.ids import extract_folder_id, extract_spreadsheet_id
 
-from .models import SchoolYear
+from .models import SchoolModule, SchoolYear
 
 # Which fields carry a Google link, and what kind. Used both for validation and for the
 # completeness check, so the two can never drift apart.
@@ -129,3 +129,69 @@ def filled_link_count(school_year: SchoolYear) -> tuple[int, int]:
     names = (*SPREADSHEET_FIELDS, *FOLDER_FIELDS)
     filled = sum(1 for name in names if (getattr(school_year, name, "") or "").strip())
     return filled, len(names)
+
+
+MODULE_FOLDER_FIELDS = ("register_folder_0_3_url", "register_folder_4_11_url")
+
+MODULE_FIELD_LABELS = {
+    "number": "Модуль",
+    "title": "Название",
+    "starts_on": "Начало",
+    "ends_on": "Окончание",
+    "register_folder_0_3_url": "Папка журналов 0-3",
+    "register_folder_4_11_url": "Папка журналов 4-11",
+}
+
+
+class SchoolModuleForm(forms.ModelForm):
+    """Calendar dates of a module and the two folders where its journals live."""
+
+    class Meta:
+        model = SchoolModule
+        fields = ("number", "title", "starts_on", "ends_on", *MODULE_FOLDER_FIELDS)
+        field_classes = {name: forms.CharField for name in MODULE_FOLDER_FIELDS}
+        labels = MODULE_FIELD_LABELS
+        widgets = {
+            "starts_on": forms.DateInput(attrs={"type": "date"}),
+            "ends_on": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, school_year=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.school_year = school_year
+        for name, field in self.fields.items():
+            field.required = name in {"number", "starts_on", "ends_on"}
+            css = "form-select" if name == "number" else "form-control"
+            field.widget.attrs.setdefault("class", css)
+            if name in MODULE_FOLDER_FIELDS:
+                field.widget.attrs.setdefault("placeholder", "https://drive.google.com/drive/folders/...")
+
+    def clean(self):
+        cleaned = super().clean()
+
+        for name in MODULE_FOLDER_FIELDS:
+            if name not in cleaned:
+                continue
+            value = (cleaned.get(name) or "").strip()
+            cleaned[name] = value
+            if not value:
+                continue
+            try:
+                extract_folder_id(value)
+            except GoogleIntegrationError as exc:
+                self.add_error(name, exc.user_message)
+
+        starts_on = cleaned.get("starts_on")
+        ends_on = cleaned.get("ends_on")
+        if starts_on and ends_on and ends_on < starts_on:
+            self.add_error("ends_on", "Дата окончания раньше даты начала.")
+
+        number = cleaned.get("number")
+        if number and self.school_year:
+            clash = SchoolModule.objects.filter(school_year=self.school_year, number=number)
+            if self.instance.pk:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                self.add_error("number", "Такой модуль в этом учебном году уже есть.")
+
+        return cleaned
