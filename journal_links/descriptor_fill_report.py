@@ -302,3 +302,63 @@ def _csv_row(problem_label: str, row: dict[str, Any]) -> dict[str, str]:
 
 def run_choice_label(job_run: JobRun) -> str:
     return f"{format_tbilisi_datetime(job_run.started_at)} — {job_status_label(job_run.status)}"
+
+
+# The subject-teachers table has to be built for the year, and nobody knows for certain which
+# subjects are graded in which class. The journals do: the school filled them in by hand, so a
+# sheet in a journal is a subject that is really taught, with the teacher really responsible for
+# it. This export turns a finished check into that table, in the shape the contract expects
+# (docs/data_contracts/subject_teachers_contract.md), so the answer comes from the real data
+# instead of from memory.
+SUBJECT_TEACHER_HEADERS = [
+    "class_code",
+    "subject_name",
+    "teacher_name",
+    "teacher_role",
+    "group_name",
+    "source_sheet_name",
+    "is_active",
+]
+
+UNKNOWN = "—"
+
+
+def build_subject_teacher_rows(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """One row per distinct class/subject/teacher found in the journals.
+
+    A check reports one row per sheet per run, so the same assignment repeats; they collapse
+    into one. A sheet whose teacher could not be read still earns a row with an empty teacher:
+    the gap is the useful part, and hiding it would make the table look complete when it is not.
+    """
+
+    seen: set[tuple[str, str, str]] = set()
+    export_rows: list[dict[str, str]] = []
+
+    for row in rows:
+        class_code = row["class_code"]
+        subject_name = row["subject_name"]
+        if class_code == UNKNOWN or subject_name == UNKNOWN:
+            continue
+
+        teacher_name = row["raw_teacher_name"]
+        key = (class_code, subject_name, teacher_name)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        export_rows.append(
+            {
+                "class_code": class_code,
+                "subject_name": subject_name,
+                "teacher_name": teacher_name,
+                "teacher_role": "subject_teacher",
+                "group_name": "",
+                "source_sheet_name": subject_name,
+                "is_active": "yes",
+            }
+        )
+
+    return sorted(
+        export_rows,
+        key=lambda item: (item["class_code"], item["subject_name"], item["teacher_name"]),
+    )

@@ -6,6 +6,7 @@ from .views import (
     descriptor_criteria_fill_report,
     descriptor_criteria_fill_report_csv,
     descriptor_criteria_report_target,
+    descriptor_criteria_subject_teachers_csv,
     disable_link,
     edit_link,
     google_oauth_callback,
@@ -28,6 +29,11 @@ urlpatterns = [
     path("links/descriptor-criteria-fill-check/", descriptor_criteria_fill_check, name="descriptor_criteria_fill_check"),
     path("links/fill-check-report/", descriptor_criteria_fill_report, name="descriptor_criteria_fill_report"),
     path("links/fill-check-report/export.csv", descriptor_criteria_fill_report_csv, name="descriptor_criteria_fill_report_csv"),
+    path(
+        "links/fill-check-report/subject-teachers.csv",
+        descriptor_criteria_subject_teachers_csv,
+        name="descriptor_criteria_subject_teachers_csv",
+    ),
     path(
         "links/fill-check-report/<uuid:run_id>/send-reminders/",
         send_descriptor_criteria_fill_reminders,

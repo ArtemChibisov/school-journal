@@ -21,6 +21,7 @@
       </form>
     {% endif %}
     <a class="btn btn-outline-secondary" href="{% url 'journal_links:descriptor_criteria_fill_report_csv' %}{% if querystring %}?{{ querystring }}{% endif %}">Экспорт CSV</a>
+    <a class="btn btn-outline-primary" href="{% url 'journal_links:descriptor_criteria_subject_teachers_csv' %}{% if querystring %}?{{ querystring }}{% endif %}">Предметы и преподаватели</a>
     <a class="btn btn-outline-secondary" href="{% url 'job_run_detail' job_run.id %}">Открыть JobRun</a>
   {% endif %}
 {% endblock %}

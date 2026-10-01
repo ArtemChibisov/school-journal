@@ -36,7 +36,9 @@ from .descriptor_fill_report import (
     REPORT_STATUSES,
     REPORT_STATUS_VALUES,
     STATUS_CHOICES,
+    SUBJECT_TEACHER_HEADERS,
     build_problem_export_rows,
+    build_subject_teacher_rows,
     build_summary,
     build_teacher_groups,
     criteria_problem_rows,
@@ -330,6 +332,27 @@ def descriptor_criteria_fill_report_csv(request):
     writer = csv.DictWriter(response, fieldnames=CSV_HEADERS)
     writer.writerow({header: header for header in CSV_HEADERS})
     writer.writerows(export_rows)
+    return response
+
+
+@login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр отчёта.")
+def descriptor_criteria_subject_teachers_csv(request):
+    """The subject-teachers table as the journals actually have it."""
+
+    report_data = _descriptor_fill_report_data(request)
+    rows = filter_rows(
+        rows_from_job_run(report_data["job_run"]),
+        class_code=report_data["filters"]["class_code"],
+        teacher=report_data["filters"]["teacher"],
+    )
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="subject-teachers.csv"'
+    response.write("﻿")
+    writer = csv.DictWriter(response, fieldnames=SUBJECT_TEACHER_HEADERS)
+    writer.writeheader()
+    writer.writerows(build_subject_teacher_rows(rows))
     return response
 
 
