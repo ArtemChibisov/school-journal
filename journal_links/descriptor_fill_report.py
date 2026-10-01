@@ -323,6 +323,21 @@ SUBJECT_TEACHER_HEADERS = [
 UNKNOWN = "—"
 
 
+def split_teacher_cell(value: str) -> list[str]:
+    """Split a teacher cell holding more than one person.
+
+    Some subjects are taught by two people and the journal writes both into one cell, separated
+    by a comma: `Мария Зуева, Дарья Рэпп`. Kept whole, that becomes one teacher nobody can
+    address. A slash is left alone on purpose - `Дмитрий Белов/Dmitrii Belov` is one person
+    written in two alphabets, not two people.
+    """
+
+    if not value:
+        return []
+    names = [part.strip() for part in value.split(",")]
+    return [name for name in names if name]
+
+
 def build_subject_teacher_rows(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     """One row per distinct class/subject/teacher found in the journals.
 
@@ -340,23 +355,23 @@ def build_subject_teacher_rows(rows: list[dict[str, Any]]) -> list[dict[str, str
         if class_code == UNKNOWN or subject_name == UNKNOWN:
             continue
 
-        teacher_name = row["raw_teacher_name"]
-        key = (class_code, subject_name, teacher_name)
-        if key in seen:
-            continue
-        seen.add(key)
+        for teacher_name in split_teacher_cell(row["raw_teacher_name"]) or [""]:
+            key = (class_code, subject_name, teacher_name)
+            if key in seen:
+                continue
+            seen.add(key)
 
-        export_rows.append(
-            {
-                "class_code": class_code,
-                "subject_name": subject_name,
-                "teacher_name": teacher_name,
-                "teacher_role": "subject_teacher",
-                "group_name": "",
-                "source_sheet_name": subject_name,
-                "is_active": "yes",
-            }
-        )
+            export_rows.append(
+                {
+                    "class_code": class_code,
+                    "subject_name": subject_name,
+                    "teacher_name": teacher_name,
+                    "teacher_role": "subject_teacher",
+                    "group_name": "",
+                    "source_sheet_name": subject_name,
+                    "is_active": "yes",
+                }
+            )
 
     return sorted(
         export_rows,

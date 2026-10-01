@@ -10,6 +10,7 @@ from jobs.models import JobRun
 from journal_links.descriptor_fill_report import (
     build_subject_teacher_rows,
     normalize_report_row,
+    split_teacher_cell,
 )
 from validation.descriptor_criteria_fill import JOB_TYPE
 
@@ -33,6 +34,30 @@ def row(class_code, subject_name, teacher_name, *, descriptor_status="filled"):
             "sheet_url": SHEET_URL,
         }
     )
+
+
+class SplitTeacherCellTests(TestCase):
+    def test_one_name_stays_one(self):
+        self.assertEqual(split_teacher_cell("Антон Михеев"), ["Антон Михеев"])
+
+    def test_a_comma_separates_two_people(self):
+        self.assertEqual(
+            split_teacher_cell("Мария Зуева, Дарья Рэпп"), ["Мария Зуева", "Дарья Рэпп"]
+        )
+
+    def test_spacing_around_the_comma_does_not_matter(self):
+        self.assertEqual(split_teacher_cell("Мария Зуева ,Дарья Рэпп"), ["Мария Зуева", "Дарья Рэпп"])
+
+    def test_a_trailing_comma_does_not_invent_a_teacher(self):
+        self.assertEqual(split_teacher_cell("Мария Зуева,"), ["Мария Зуева"])
+
+    def test_a_slash_is_left_alone(self):
+        self.assertEqual(
+            split_teacher_cell("Дмитрий Белов/Dmitrii Belov"), ["Дмитрий Белов/Dmitrii Belov"]
+        )
+
+    def test_an_empty_cell_yields_nothing(self):
+        self.assertEqual(split_teacher_cell(""), [])
 
 
 class BuildSubjectTeacherRowsTests(TestCase):
@@ -67,6 +92,22 @@ class BuildSubjectTeacherRowsTests(TestCase):
         )
 
         self.assertEqual([item["teacher_name"] for item in rows], ["Teacher A", "Teacher B"])
+
+    def test_two_teachers_in_one_cell_become_two_rows(self):
+        rows = build_subject_teacher_rows([row("0M", "Soft Skills", "Мария Зуева, Дарья Рэпп")])
+
+        self.assertEqual(
+            [item["teacher_name"] for item in rows], ["Дарья Рэпп", "Мария Зуева"]
+        )
+        self.assertEqual({item["subject_name"] for item in rows}, {"Soft Skills"})
+
+    def test_a_slash_is_one_person_in_two_alphabets(self):
+        rows = build_subject_teacher_rows(
+            [row("7К2", "Математика", "Дмитрий Белов/Dmitrii Belov")]
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["teacher_name"], "Дмитрий Белов/Dmitrii Belov")
 
     def test_a_sheet_without_a_readable_teacher_still_earns_a_row(self):
         rows = build_subject_teacher_rows([row("7A", "Math", "")])
