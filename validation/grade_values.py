@@ -1,20 +1,26 @@
 """The rules that decide whether a grade reaches the report.
 
-Faithfully ported from the legacy report builder - `school_journal-main/generate_page.py` and
-the two `marks_dict` files it loads. Ported, not improved: the point of checking values is to
-predict what the report will do with them, so a check that applied better rules would pass a
-value the report then drops, which is the failure it exists to prevent.
+Ported from the path the reports actually take: `enrich_mark` in `school_journal-main/main.py`,
+which reads the cell, and the renderer in `generate_page.py`, which decides what to draw. The
+two `marks_dict` files hold the scales.
 
-The known defects of those rules are therefore reproduced here, and named:
+(`make_mark_value` in generate_page.py looks like the parser but is never called - it is
+imported in main.py and left unused. Reading it first is what made the first version of this
+module reject nineteen thousand perfectly good grades.)
 
-- a letter grade in classes 0-3 raises in the legacy builder, because the labels its letters
-  map to are not in the primary scale. It is reported as an error, since it breaks generation.
-- the 4-11 scale puts the boundary between `Meets expectations` and `Exceeds expectations` at
-  95, while the labels on those columns read `(50-89%)` and `(90-100%)`. A child with 92 lands
-  in a column that says 50-89. That is a bug in the rules, left alone here on purpose.
+What the report does with a cell:
 
-Both are for the school to decide on. When they are fixed, they are fixed here, and the check
-and the report stay in step because they read the same table.
+- the exact text of a scale level, which is what teachers pick from the dropdown, ticks that
+  column. This is the ordinary case and by far the most common;
+- a number falls into the band where `low < value <= high`, and ticks it;
+- `-` means no grade was given, and the row is drawn as dashes;
+- anything else is kept raw and handed to the renderer, which hunts through it for a letter
+  grade and a number. `70 - B` and `86, A` survive this and are printed as `70% B`. Something
+  with no letter in it - `Да`, `40,5`, a paragraph of feedback - has no column to go in and
+  is written nowhere at all.
+
+That last case is the one worth reporting: the teacher filled the cell, the check for
+emptiness is satisfied, and the parent sees a blank.
 """
 
 from __future__ import annotations
@@ -40,33 +46,18 @@ MIDDLE_HIGH_SCALE = (
     ("Превосходит ожидания по программе | Exceeds expectations (90-100%)", 95, 1000),
 )
 
-LETTER_TO_LABEL = {
-    "A*": "Превосходит ожидания по программе | Exceeds expectations (90-100%)",
-    "A+": "Превосходит ожидания по программе | Exceeds expectations (90-100%)",
-    "A": "Соответствует ожиданиям по программе | Meets expectations (50-89%)",
-    "B": "Соответствует ожиданиям по программе | Meets expectations (50-89%)",
-    "C": "Соответствует ожиданиям по программе | Meets expectations (50-89%)",
-    "D": "Соответствует ожиданиям по программе | Meets expectations (50-89%)",
-    "E": "Начальный уровень | Beginner level (40-49%)",
-    "F": "Не проявляется | Not evident (0-39%)",
-    "G": "Не проявляется | Not evident (0-39%)",
-    "U": "Не проявляется | Not evident (0-39%)",
-}
+# The letters the renderer recognises when it digs through an unrecognised cell.
+LETTERS = {"A*", "A+", "A", "B", "C", "D", "E", "F", "G", "U"}
 
-# Exactly what the legacy builder treats as no grade. An em dash is not on the list, so a cell
-# holding one is reported rather than passed over - which is right, because the report would
-# drop it too.
-EMPTY_VALUES = {"", "-"}
+NO_GRADE_VALUES = {"", "-"}
 
-VERDICT_OK = "ok"
+VERDICT_LEVEL = "level"
+VERDICT_NUMBER = "number"
+VERDICT_LETTER_AND_NUMBER = "letter_and_number"
 VERDICT_EMPTY = "empty"
-VERDICT_UNKNOWN = "unknown"
-VERDICT_LETTER_NOT_IN_SCALE = "letter_not_in_scale"
+VERDICT_LOST = "lost"
 
-REASONS = {
-    VERDICT_UNKNOWN: "Значение не распознаётся и в отчёт не попадёт",
-    VERDICT_LETTER_NOT_IN_SCALE: "Буквенная оценка в классах 0–3: отчёт на ней ломается",
-}
+REASONS = {VERDICT_LOST: "Отчёт не поймёт это значение — у родителя будет пусто"}
 
 
 @dataclass(frozen=True)
@@ -84,12 +75,23 @@ def scale_for_band(grade_band: str):
     return PRIMARY_SCALE if grade_band == BAND_PRIMARY else MIDDLE_HIGH_SCALE
 
 
-def _bucket_by_percent(value: float, scale) -> str | None:
+def _as_number(text: str) -> float | None:
+    """A number the way a spreadsheet hands one over - never with a comma.
+
+    `enrich_mark` only treats a cell as numeric when openpyxl already gave it as int or float,
+    so `40,5` typed as text stays text and goes down the unrecognised path.
+    """
+
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _band_for_number(value: float, scale) -> str | None:
+    # `low < value <= high`, exactly as enrich_mark compares.
     for label, low, high in scale:
-        if low == -1:
-            if value < high:
-                return label
-        elif low <= value < high:
+        if low < value <= high:
             return label
     return None
 
@@ -97,30 +99,52 @@ def _bucket_by_percent(value: float, scale) -> str | None:
 def classify_grade(value: object, *, grade_band: str) -> GradeVerdict:
     """What the report would make of this cell."""
 
-    text = "" if value is None else str(value).strip()
-    if text in EMPTY_VALUES:
+    if value is None:
         return GradeVerdict(VERDICT_EMPTY)
 
     scale = scale_for_band(grade_band)
-    label_by_name = {label for label, _, _ in scale}
 
-    letter = text.upper()
-    if letter in LETTER_TO_LABEL:
-        label = LETTER_TO_LABEL[letter]
-        if label not in label_by_name:
-            return GradeVerdict(
-                VERDICT_LETTER_NOT_IN_SCALE, reason=REASONS[VERDICT_LETTER_NOT_IN_SCALE]
-            )
-        return GradeVerdict(VERDICT_OK, label=label)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        label = _band_for_number(float(value), scale)
+        if label is None:
+            return GradeVerdict(VERDICT_LOST, reason=REASONS[VERDICT_LOST])
+        return GradeVerdict(VERDICT_NUMBER, label=label)
 
-    try:
-        # Plain float(), as the legacy builder does it: `7,5` with a comma is not a number to
-        # it and never reaches the report, so it must not pass here either.
-        number = float(text)
-    except ValueError:
-        return GradeVerdict(VERDICT_UNKNOWN, reason=REASONS[VERDICT_UNKNOWN])
+    text = str(value).strip()
+    if text in NO_GRADE_VALUES:
+        return GradeVerdict(VERDICT_EMPTY)
 
-    label = _bucket_by_percent(number, scale)
-    if label is None:
-        return GradeVerdict(VERDICT_UNKNOWN, reason=REASONS[VERDICT_UNKNOWN])
-    return GradeVerdict(VERDICT_OK, label=label)
+    for label, _, _ in scale:
+        if text == label:
+            return GradeVerdict(VERDICT_LEVEL, label=label)
+
+    number = _as_number(text)
+    if number is not None:
+        label = _band_for_number(number, scale)
+        if label is None:
+            return GradeVerdict(VERDICT_LOST, reason=REASONS[VERDICT_LOST])
+        return GradeVerdict(VERDICT_NUMBER, label=label)
+
+    # The renderer's last resort is to hunt for a letter grade among the words, so `70 - B`
+    # and `86, A` do come out right. But it hunts in anything: a sentence containing the word
+    # `a` gives it a letter, and the parent is shown `A` where feedback was written.
+    #
+    # So a cell only passes when every word in it is part of a grade. Predicting that the
+    # report prints something is not the same as predicting it prints the truth, and a grade
+    # quietly replaced by the wrong one is worse than a grade that goes missing.
+    letter = ""
+    for token in text.replace("%", "").split():
+        word = token.strip(",;:").upper()
+        if not word or not any(char.isalnum() for char in word):
+            continue
+        if word in LETTERS:
+            letter = word
+            continue
+        if _as_number(word) is not None:
+            continue
+        return GradeVerdict(VERDICT_LOST, reason=REASONS[VERDICT_LOST])
+
+    if letter:
+        return GradeVerdict(VERDICT_LETTER_AND_NUMBER, label=letter)
+
+    return GradeVerdict(VERDICT_LOST, reason=REASONS[VERDICT_LOST])

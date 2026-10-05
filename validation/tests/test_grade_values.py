@@ -9,50 +9,96 @@ from validation.grade_value_check import check_sheet_grades, grade_band_for_clas
 from validation.grade_values import (
     BAND_MIDDLE_HIGH,
     BAND_PRIMARY,
+    MIDDLE_HIGH_SCALE,
+    PRIMARY_SCALE,
     VERDICT_EMPTY,
-    VERDICT_LETTER_NOT_IN_SCALE,
-    VERDICT_OK,
-    VERDICT_UNKNOWN,
+    VERDICT_LETTER_AND_NUMBER,
+    VERDICT_LEVEL,
+    VERDICT_LOST,
+    VERDICT_NUMBER,
     classify_grade,
 )
 
 
 class ClassifyGradeTests(SimpleTestCase):
-    def test_a_percentage_is_understood_in_both_bands(self):
-        for band in (BAND_PRIMARY, BAND_MIDDLE_HIGH):
-            self.assertEqual(classify_grade("75", grade_band=band).verdict, VERDICT_OK, band)
+    """The ordinary case first: teachers pick a level from the dropdown and that text lands
+    in the cell. Nineteen thousand of the grades in the real journals look like this."""
 
-    def test_a_letter_works_in_the_senior_scale(self):
-        verdict = classify_grade("A", grade_band=BAND_MIDDLE_HIGH)
+    def test_the_text_of_a_level_is_the_normal_grade(self):
+        for label, _, _ in MIDDLE_HIGH_SCALE:
+            verdict = classify_grade(label, grade_band=BAND_MIDDLE_HIGH)
+            self.assertEqual(verdict.verdict, VERDICT_LEVEL, label)
+            self.assertFalse(verdict.is_problem)
 
-        self.assertEqual(verdict.verdict, VERDICT_OK)
+    def test_each_band_has_its_own_levels(self):
+        primary_label = PRIMARY_SCALE[0][0]
+
+        self.assertEqual(
+            classify_grade(primary_label, grade_band=BAND_PRIMARY).verdict, VERDICT_LEVEL
+        )
+        self.assertEqual(
+            classify_grade(primary_label, grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST
+        )
+
+    def test_a_number_falls_into_a_band(self):
+        verdict = classify_grade(75, grade_band=BAND_MIDDLE_HIGH)
+
+        self.assertEqual(verdict.verdict, VERDICT_NUMBER)
         self.assertIn("Meets expectations", verdict.label)
 
-    def test_a_letter_breaks_the_primary_scale(self):
-        """The legacy builder raises on it, so it has to be reported, not quietly allowed."""
+    def test_a_number_written_as_text_is_still_a_number(self):
+        self.assertEqual(classify_grade("75", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_NUMBER)
 
-        verdict = classify_grade("A", grade_band=BAND_PRIMARY)
+    def test_the_boundary_is_where_enrich_mark_puts_it(self):
+        """`low < value <= high`, so 49 belongs to the band below, not above."""
 
-        self.assertEqual(verdict.verdict, VERDICT_LETTER_NOT_IN_SCALE)
-        self.assertTrue(verdict.is_problem)
+        self.assertIn("Beginner", classify_grade(49, grade_band=BAND_MIDDLE_HIGH).label)
+        self.assertIn("Meets", classify_grade(50, grade_band=BAND_MIDDLE_HIGH).label)
 
-    def test_letters_are_case_insensitive(self):
+    def test_a_percentage_and_a_letter_together_survive(self):
+        """The renderer digs a letter out of these and prints them, so they are fine."""
+
+        for value in ("86, A", "70 - B", "65 C", "91, A*", "55, D"):
+            verdict = classify_grade(value, grade_band=BAND_MIDDLE_HIGH)
+            self.assertEqual(verdict.verdict, VERDICT_LETTER_AND_NUMBER, value)
+
+    def test_a_lone_letter_is_a_grade(self):
         self.assertEqual(
-            classify_grade("a", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_OK
+            classify_grade("B", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LETTER_AND_NUMBER
         )
 
-    def test_a_starred_letter_is_understood(self):
-        self.assertEqual(
-            classify_grade("A*", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_OK
+    def test_words_are_reported(self):
+        for value in ("Да", "Нет", "Не оценивается", "зачёт"):
+            verdict = classify_grade(value, grade_band=BAND_MIDDLE_HIGH)
+            self.assertEqual(verdict.verdict, VERDICT_LOST, value)
+            self.assertTrue(verdict.is_problem)
+
+    def test_a_sentence_is_reported_even_when_it_contains_a_letter(self):
+        """`a` reads as the letter grade A, and the parent would be shown A instead of text."""
+
+        verdict = classify_grade(
+            "No grades to generate a fianl grade", grade_band=BAND_MIDDLE_HIGH
         )
 
-    def test_words_are_not_grades(self):
-        for value in ("зачёт", "отлично", "н/а", "сдал"):
-            self.assertEqual(
-                classify_grade(value, grade_band=BAND_MIDDLE_HIGH).verdict,
-                VERDICT_UNKNOWN,
-                value,
-            )
+        self.assertEqual(verdict.verdict, VERDICT_LOST)
+
+    def test_teacher_feedback_in_a_grade_cell_is_reported(self):
+        verdict = classify_grade(
+            "Varvara didn't submit her notebook, so I couldn't assess her notes.",
+            grade_band=BAND_MIDDLE_HIGH,
+        )
+
+        self.assertEqual(verdict.verdict, VERDICT_LOST)
+
+    def test_a_comma_decimal_is_reported(self):
+        """openpyxl hands it over as text, and enrich_mark only buckets real numbers."""
+
+        self.assertEqual(classify_grade("40,5", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST)
+
+    def test_an_em_dash_is_reported(self):
+        """Only a plain hyphen means `no grade`; an em dash goes nowhere in the report."""
+
+        self.assertEqual(classify_grade("—", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST)
 
     def test_an_empty_cell_is_not_a_bad_value(self):
         for value in ("", "   ", "-", None):
@@ -62,30 +108,8 @@ class ClassifyGradeTests(SimpleTestCase):
                 repr(value),
             )
 
-    def test_an_em_dash_is_reported_because_the_report_drops_it(self):
-        self.assertEqual(
-            classify_grade("—", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_UNKNOWN
-        )
-
-    def test_a_comma_decimal_is_reported_because_the_report_drops_it(self):
-        self.assertEqual(
-            classify_grade("7,5", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_UNKNOWN
-        )
-
-    def test_the_senior_boundary_is_where_the_legacy_rules_put_it(self):
-        """94 lands under a column labelled 50-89%. Reproduced on purpose, not endorsed."""
-
-        self.assertIn(
-            "50-89", classify_grade("94", grade_band=BAND_MIDDLE_HIGH).label
-        )
-        self.assertIn(
-            "90-100", classify_grade("95", grade_band=BAND_MIDDLE_HIGH).label
-        )
-
-    def test_a_percentage_above_the_scale_is_not_understood(self):
-        self.assertEqual(
-            classify_grade("5000", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_UNKNOWN
-        )
+    def test_a_number_outside_the_scale_is_reported(self):
+        self.assertEqual(classify_grade(5000, grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST)
 
 
 class GradeBandTests(TestCase):
@@ -142,7 +166,8 @@ class CheckSheetGradesTests(SimpleTestCase):
         )
 
     def test_good_grades_produce_nothing(self):
-        self.assertEqual(self.check([["75"], ["90"], ["A"]]), [])
+        level = MIDDLE_HIGH_SCALE[2][0]
+        self.assertEqual(self.check([["75"], [level], ["A"], ["86, A"]]), [])
 
     def test_a_word_is_reported_with_its_context(self):
         problems = self.check([["зачёт"]])
@@ -164,11 +189,11 @@ class CheckSheetGradesTests(SimpleTestCase):
 
         self.assertEqual({item["value"] for item in problems}, {"зачёт", "н/а"})
 
-    def test_a_letter_is_reported_for_a_junior_class(self):
-        problems = self.check([["A"]], band=BAND_PRIMARY)
+    def test_a_senior_level_in_a_junior_class_is_reported(self):
+        problems = self.check([[MIDDLE_HIGH_SCALE[2][0]]], band=BAND_PRIMARY)
 
         self.assertEqual(len(problems), 1)
-        self.assertEqual(problems[0]["verdict"], VERDICT_LETTER_NOT_IN_SCALE)
+        self.assertEqual(problems[0]["verdict"], VERDICT_LOST)
 
     def test_a_sheet_without_criteria_is_skipped(self):
         wb = Workbook()
