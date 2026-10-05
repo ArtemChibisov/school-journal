@@ -5,6 +5,9 @@
 
 {% block page_actions %}
   <a class="btn btn-outline-secondary" href="{% url 'journal_links:descriptor_criteria_fill_report' %}">Отчёт заполненности</a>
+  {% if can_edit %}
+    <a class="btn btn-primary" href="{% url 'notifications:teacher_invites' %}">Приглашения в Telegram</a>
+  {% endif %}
 {% endblock %}
 
 {% block content %}

@@ -1,9 +1,10 @@
+import csv
 import json
 import re
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -16,7 +17,7 @@ from journal_links.descriptor_fill_report import (
     build_teacher_groups,
     rows_from_job_run,
 )
-from school_years.models import Teacher
+from school_years.models import SchoolYear, Teacher
 
 from jobs.models import JobLog, JobRun
 from jobs.services import log_step
@@ -24,6 +25,7 @@ from jobs.services import log_step
 from pipeline.audit import log_criterion_event
 from pipeline.models import CriterionEntry
 from .models import TeacherConfirmation, TeacherContact
+from .invites import bot_username, build_invites
 from .recheck import run_teacher_recheck_job
 from .reminder_mutes import current_module, muted_teacher_ids, resolve_teacher, set_muted
 from .services import TelegramSendError, send_telegram
@@ -416,3 +418,46 @@ def toggle_reminder_mute(request):
     else:
         messages.success(request, f"{teacher.display_name} снова получает напоминания.")
     return redirect("notifications:reminder_list")
+
+
+def _active_school_year():
+    return SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
+
+
+@login_required
+@permission_required_403("jobs.send_reminders", message="Доступ запрещён: нельзя создавать приглашения.")
+def teacher_invites(request):
+    """Links that bind each teacher's Telegram chat, ready to be sent out."""
+
+    school_year = _active_school_year()
+    rows = build_invites(school_year) if school_year else []
+
+    return render(
+        request,
+        "notifications/teacher_invites.html",
+        {
+            "school_year": school_year,
+            "rows": rows,
+            "bot": bot_username(),
+            "registered_total": sum(1 for row in rows if row["registered"]),
+            "pending_total": sum(1 for row in rows if not row["registered"]),
+        },
+    )
+
+
+@login_required
+@permission_required_403("jobs.send_reminders", message="Доступ запрещён: нельзя создавать приглашения.")
+def teacher_invites_csv(request):
+    school_year = _active_school_year()
+    rows = build_invites(school_year) if school_year else []
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="telegram-invites.csv"'
+    response.write("\ufeff")
+    writer = csv.writer(response)
+    writer.writerow(["Преподаватель", "Статус", "Ссылка"])
+    for row in rows:
+        writer.writerow(
+            [row["name"], "уже привязан" if row["registered"] else "ждёт", row["link"]]
+        )
+    return response

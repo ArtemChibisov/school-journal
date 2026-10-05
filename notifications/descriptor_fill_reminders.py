@@ -12,6 +12,7 @@ from jobs.models import JobLog, JobRun
 from jobs.services import log_step
 from journal_links.descriptor_fill_report import MAX_TEACHER_NAME_LENGTH, REPORT_JOB_TYPE, rows_from_job_run
 from notifications.models import NotificationEvent, TeacherContact
+from notifications.invites import resolve_contact_by_name
 from notifications.reminder_mutes import current_module, is_muted
 from notifications.services import send_telegram
 
@@ -133,9 +134,9 @@ def build_descriptor_fill_reminder_message(payload: dict) -> str:
 
 
 def _resolve_contact(teacher_name: str) -> tuple[TeacherContact | None, str | None]:
-    contact = TeacherContact.objects.filter(name=teacher_name).first()
-    if not contact:
-        contact = TeacherContact.objects.filter(name__iexact=teacher_name).first()
+    # Through the directory, so a teacher named in English in one journal and in Russian in
+    # another still reaches the single chat we have for them.
+    contact = resolve_contact_by_name(teacher_name)
     if not contact:
         return None, "skipped_no_contact"
     if not contact.is_active:
