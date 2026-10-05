@@ -172,7 +172,9 @@ def _grade_summary(ws, *, criteria_cols: list[int], student_rows: list[int]) -> 
     }
 
 
-def check_subject_sheet(ws, *, class_code: str, sheet_url: str) -> dict:
+def check_subject_sheet(ws, *, class_code: str, sheet_url: str, sheet_name: str | None = None) -> dict:
+    # The worksheet knows the name the .xlsx carries; the caller may know the full one.
+    subject_name = sheet_name or ws.title
     max_row, max_col = _get_real_data_bounds(ws)
     class_anchor = _find_anchor(ws, "класс", "grade")
     teacher_anchor = _find_anchor(ws, "учитель", "teacher")
@@ -223,7 +225,7 @@ def check_subject_sheet(ws, *, class_code: str, sheet_url: str) -> dict:
     return {
         "class_code": class_code,
         "sheet_class_code": str(_cell_right_value(ws, class_anchor) or "").strip(),
-        "subject_name": ws.title,
+        "subject_name": subject_name,
         "teacher_name": teacher_name,
         "module_number": module_number,
         "descriptor_status": descriptor_status,
@@ -239,11 +241,80 @@ def check_subject_sheet(ws, *, class_code: str, sheet_url: str) -> dict:
         "grades_status": grade_summary["grades_status"],
         "overall_status": overall_status,
         "sheet_url": sheet_url,
-        "sheet_name": ws.title,
+        "sheet_name": subject_name,
     }
 
 
-def check_workbook_descriptor_criteria(path: str, *, class_code: str, sheet_url: str) -> dict:
+# Excel cannot hold a worksheet name longer than this, and the journals reach us through
+# Google's .xlsx export, which obeys that limit. The sheet is named in full in Google Sheets;
+# it is the trip through .xlsx that cuts it.
+EXCEL_SHEET_NAME_LIMIT = 31
+
+
+def fetch_sheet_titles(sheet_url: str, *, job_run: JobRun | None = None) -> list[str] | None:
+    """The worksheet titles as Google holds them, or None when they cannot be read.
+
+    Only the names are at stake here, so a failure must not stop a check that would otherwise
+    succeed: the workbook is already downloaded and readable. We note it and carry on with the
+    names the .xlsx carries.
+    """
+
+    from google_integration.ids import extract_spreadsheet_id
+    from google_integration.status import build_clients
+
+    try:
+        spreadsheet_id = extract_spreadsheet_id(sheet_url)
+        _, sheets = build_clients()
+        return sheets.get_sheet_titles(spreadsheet_id)
+    except Exception as exc:  # noqa: BLE001
+        # Deliberately broad. An expired token raises google.auth RefreshError, a missing
+        # credentials file raises OSError, and neither is a GoogleIntegrationError - but the
+        # workbook is already downloaded and perfectly readable, so none of them is a reason
+        # to fail a check over the spelling of a worksheet name. The warning says what
+        # happened; the check carries on with the shorter names.
+        if job_run is not None:
+            log_step(
+                job_run=job_run,
+                level=JobLog.Level.WARNING,
+                message="Full sheet names unavailable, using the names from the workbook",
+                context={
+                    "sheet_url": sheet_url,
+                    "error_type": type(exc).__name__,
+                    "reason": str(exc)[:500],
+                },
+            )
+        return None
+
+
+def restore_full_sheet_names(xlsx_names: list[str], api_titles: list[str] | None) -> dict[str, str]:
+    """Map each worksheet name from the .xlsx back to its full name in Google Sheets.
+
+    `Проектная деятельность | Project` arrives as `Проектная деятельность | Projec`, and that
+    cut name is what a parent later reads in the report. The API knows the real title, and the
+    export keeps the sheets in order, so the two line up by position.
+
+    The mapping is only trusted where it is verifiable: the counts must match and the cut name
+    must be the beginning of the full one. Excel also rewrites characters it will not accept in
+    a name, and those sheets simply keep what the workbook says rather than risk a wrong guess.
+    """
+
+    if not api_titles or len(api_titles) != len(xlsx_names):
+        return {}
+
+    restored: dict[str, str] = {}
+    for xlsx_name, api_title in zip(xlsx_names, api_titles):
+        if api_title != xlsx_name and api_title.startswith(xlsx_name):
+            restored[xlsx_name] = api_title
+    return restored
+
+
+def check_workbook_descriptor_criteria(
+    path: str,
+    *,
+    class_code: str,
+    sheet_url: str,
+    sheet_titles: list[str] | None = None,
+) -> dict:
     wb = None
     try:
         wb = load_workbook(path, data_only=True)
@@ -254,8 +325,10 @@ def check_workbook_descriptor_criteria(path: str, *, class_code: str, sheet_url:
     sheets_skipped = 0
     sheet_events: list[dict] = []
     try:
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
+        full_names = restore_full_sheet_names(wb.sheetnames, sheet_titles)
+        for workbook_name in wb.sheetnames:
+            ws = wb[workbook_name]
+            sheet_name = full_names.get(workbook_name, workbook_name)
             sheet_type = _classify_sheet_type(sheet_name)
             sheet_events.append({"event": "sheet_detected", "sheet_name": sheet_name, "sheet_type": sheet_type})
             if sheet_type in {"tutor", "service"}:
@@ -263,7 +336,9 @@ def check_workbook_descriptor_criteria(path: str, *, class_code: str, sheet_url:
                 sheet_events.append({"event": "sheet_skipped", "sheet_name": sheet_name, "sheet_type": sheet_type})
                 continue
 
-            row = check_subject_sheet(ws, class_code=class_code, sheet_url=sheet_url)
+            row = check_subject_sheet(
+                ws, class_code=class_code, sheet_url=sheet_url, sheet_name=sheet_name
+            )
             rows.append(row)
             sheet_events.extend(
                 [
@@ -486,6 +561,7 @@ def run_descriptor_criteria_fill_check_job(
                     str(temp_file),
                     class_code=link.class_code,
                     sheet_url=link.google_sheet_url,
+                    sheet_titles=fetch_sheet_titles(link.google_sheet_url, job_run=job_run),
                 )
                 table_rows = workbook_result["rows"]
                 table_summary = workbook_result["summary"]
