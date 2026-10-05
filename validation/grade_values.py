@@ -13,7 +13,7 @@ What the report does with a cell:
 - the exact text of a scale level, which is what teachers pick from the dropdown, ticks that
   column. This is the ordinary case and by far the most common;
 - a number falls into the band where `low < value <= high`, and ticks it;
-- `-` means no grade was given, and the row is drawn as dashes;
+- a dash means no grade was given, and the row is drawn as dashes;
 - anything else is kept raw and handed to the renderer, which hunts through it for a letter
   grade and a number. `70 - B` and `86, A` survive this and are printed as `70% B`. Something
   with no letter in it - `Да`, `40,5`, a paragraph of feedback - has no column to go in and
@@ -49,7 +49,9 @@ MIDDLE_HIGH_SCALE = (
 # The letters the renderer recognises when it digs through an unrecognised cell.
 LETTERS = {"A*", "A+", "A", "B", "C", "D", "E", "F", "G", "U"}
 
-NO_GRADE_VALUES = {"", "-"}
+# A dash means the grade was not given. Teachers write it several ways, and the report
+# draws exactly such a dash for an empty grade, so these are what it draws coming back.
+NO_GRADE_VALUES = {"", "-", "--", "–", "—", "−"}
 
 VERDICT_LEVEL = "level"
 VERDICT_NUMBER = "number"

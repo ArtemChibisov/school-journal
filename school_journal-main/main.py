@@ -50,6 +50,9 @@ class Subject:
 
 
 
+NO_GRADE_MARKS = {'', '-', '--', '–', '—', '−'}
+
+
 def enrich_mark(mark_value):
     if isinstance(mark_value, (int, float)):
         for key, value in m.marks_dict.items():
@@ -62,7 +65,10 @@ def enrich_mark(mark_value):
             return result
         except KeyError:
             print(f'No key in the mark dictionary for {mark_value}')
-            if mark_value == '-':
+            # Прочерк означает, что оценки нет. Кроме дефиса учителя ставят длинное и
+            # короткое тире, минус и пару дефисов - в отчёте это выглядит так же, как
+            # прочерк, который он сам и рисует для пустой оценки.
+            if isinstance(mark_value, str) and mark_value.strip() in NO_GRADE_MARKS:
                 return [-1, 'NOT_FOUND']
             else:
                 return [-2, mark_value]

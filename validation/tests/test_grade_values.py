@@ -95,13 +95,18 @@ class ClassifyGradeTests(SimpleTestCase):
 
         self.assertEqual(classify_grade("40,5", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST)
 
-    def test_an_em_dash_is_reported(self):
-        """Only a plain hyphen means `no grade`; an em dash goes nowhere in the report."""
+    def test_every_kind_of_dash_means_no_grade(self):
+        """Teachers write the dash several ways - and the report draws one just like it."""
 
-        self.assertEqual(classify_grade("—", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST)
+        for value in ("-", "--", "–", "—", "−"):
+            self.assertEqual(
+                classify_grade(value, grade_band=BAND_MIDDLE_HIGH).verdict,
+                VERDICT_EMPTY,
+                value,
+            )
 
     def test_an_empty_cell_is_not_a_bad_value(self):
-        for value in ("", "   ", "-", None):
+        for value in ("", "   ", "-", " — ", None):
             self.assertEqual(
                 classify_grade(value, grade_band=BAND_MIDDLE_HIGH).verdict,
                 VERDICT_EMPTY,
@@ -194,6 +199,46 @@ class CheckSheetGradesTests(SimpleTestCase):
 
         self.assertEqual(len(problems), 1)
         self.assertEqual(problems[0]["verdict"], VERDICT_LOST)
+
+    def test_the_retake_column_is_not_a_criterion(self):
+        """`Пересдача` holds да/нет. The report reads it separately to highlight a comment."""
+
+        problems = check_sheet_grades(
+            sheet_with_grades([["75", "Нет"], ["80", "Да"]], criteria=("Критерий 1", "Пересдача")),
+            class_code="4А",
+            subject_name="Математика",
+            grade_band=BAND_MIDDLE_HIGH,
+        )
+
+        self.assertEqual(problems, [])
+
+    def test_the_comment_column_is_not_a_criterion_either(self):
+        problems = check_sheet_grades(
+            sheet_with_grades(
+                [["75", "Отличная работа, так держать"]],
+                criteria=("Критерий 1", "Комментарий"),
+            ),
+            class_code="4А",
+            subject_name="Математика",
+            grade_band=BAND_MIDDLE_HIGH,
+        )
+
+        self.assertEqual(problems, [])
+
+    def test_columns_after_a_service_column_are_left_alone(self):
+        """Everything past the first service column belongs to the report, not to grading."""
+
+        problems = check_sheet_grades(
+            sheet_with_grades(
+                [["75", "комментарий учителя", "Да"]],
+                criteria=("Критерий 1", "Комментарий", "Пересдача"),
+            ),
+            class_code="4А",
+            subject_name="Математика",
+            grade_band=BAND_MIDDLE_HIGH,
+        )
+
+        self.assertEqual(problems, [])
 
     def test_a_sheet_without_criteria_is_skipped(self):
         wb = Workbook()

@@ -23,7 +23,7 @@ from .descriptor_criteria_fill import (
     _cell_value,
     _classify_sheet_type,
     _find_anchor,
-    _find_comment_col,
+    _find_service_col,
     _find_student_name_header_row,
     _get_real_data_bounds,
     _is_filled_criteria_value,
@@ -65,8 +65,8 @@ def check_sheet_grades(ws, *, class_code: str, subject_name: str, grade_band: st
         return []
 
     criteria_row, criteria_col = criteria_anchor
-    comment_col = _find_comment_col(ws, criteria_row, criteria_col + 1, max_col)
-    end_col = (comment_col - 1) if comment_col else max_col
+    service_col = _find_service_col(ws, criteria_row, criteria_col + 1, max_col)
+    end_col = (service_col - 1) if service_col else max_col
 
     columns: list[tuple[int, str]] = []
     for col_num in range(criteria_col + 1, end_col + 1):

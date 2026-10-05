@@ -142,10 +142,18 @@ def _parse_module_number(value: object) -> int | None:
         return int(match.group(0)) if match else None
 
 
-def _find_comment_col(ws, criteria_row: int, start_col: int, max_col: int) -> int | None:
+# Columns that follow the criteria and are not criteria. `Пересдача` holds `да` or `нет`,
+# which is not a grade and must not be checked as one - the legacy report reads it separately
+# and uses it to highlight the teacher's comment. The words are the ones it matches on.
+SERVICE_COLUMN_MARKERS = ("коммент", "comment", "пересда", "retake", "resit", "make-up")
+
+
+def _find_service_col(ws, criteria_row: int, start_col: int, max_col: int) -> int | None:
+    """The first column after the criteria that holds something other than a criterion."""
+
     for col_num in range(start_col, max_col + 1):
         normalized = _normalize_text(_cell_value(ws, criteria_row, col_num))
-        if "коммент" in normalized or "comment" in normalized:
+        if any(marker in normalized for marker in SERVICE_COLUMN_MARKERS):
             return col_num
     return None
 
@@ -183,7 +191,7 @@ def collect_ai_reviewable_criteria_from_workbook(path: str, *, class_code: str, 
             teacher_name = str(_cell_right_value(ws, teacher_anchor) or "").strip()
             module_number = _parse_module_number(_cell_right_value(ws, module_anchor))
             criteria_row, criteria_col = criteria_anchor
-            comment_col = _find_comment_col(ws, criteria_row, criteria_col + 1, max_col)
+            comment_col = _find_service_col(ws, criteria_row, criteria_col + 1, max_col)
             end_col = (comment_col - 1) if comment_col else max_col
 
             for col_num in range(criteria_col + 1, end_col + 1):
