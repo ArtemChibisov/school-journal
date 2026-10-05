@@ -67,6 +67,7 @@
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/school-year/' in request.path %}active{% endif %}" href="{% url 'school_years:school_year_settings' %}">Учебный год</a>
                 <a class="nav-link {% if '/roster/' in request.path %}active{% endif %}" href="{% url 'school_years:roster_import' %}">Состав классов</a>
+                <a class="nav-link {% if '/subject-teachers/' in request.path %}active{% endif %}" href="{% url 'school_years:subject_teachers' %}">Предметы и преподаватели</a>
                 <a class="nav-link {% if '/modules/' in request.path %}active{% endif %}" href="{% url 'school_years:module_registers' %}">Журналы модуля</a>
                 <a class="nav-link {% if '/google/' in request.path %}active{% endif %}" href="{% url 'google_integration:google_status' %}">Google-подключение</a>
               {% endif %}

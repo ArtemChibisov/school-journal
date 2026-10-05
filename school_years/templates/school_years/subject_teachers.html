@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block page_title %}Предметы и преподаватели{% endblock %}
+{% block page_heading %}Предметы и преподаватели{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn-outline-secondary" href="{% url 'school_years:school_year_settings' %}">Учебный год</a>
+  {% if last_run %}
+    <a class="btn btn-outline-secondary" href="{% url 'job_run_detail' last_run.id %}">Технические логи</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <section class="card mb-4">
+    <div class="card-body">
+      {% if school_years|length > 1 %}
+        <form method="get" class="row g-3 align-items-end mb-3">
+          <div class="col-12 col-md-5">
+            <label class="form-label" for="id_school_year">Учебный год</label>
+            <select id="id_school_year" name="school_year" class="form-select" onchange="this.form.submit()">
+              {% for year in school_years %}
+                <option value="{{ year.pk }}" {% if school_year and school_year.pk == year.pk %}selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </form>
+      {% endif %}
+
+      {% if not school_year %}
+        <p class="mb-0 text-secondary">Сначала создайте учебный год.</p>
+      {% elif not school_year.subject_teacher_sheet_url %}
+        <div class="alert alert-warning mb-0">
+          Ссылка на таблицу предметов и преподавателей не указана.
+          <a href="{% url 'school_years:school_year_settings' %}">Заполните её в настройках года</a>.
+        </div>
+      {% else %}
+        <p class="mb-2">
+          Таблица:
+          <a href="{{ school_year.subject_teacher_sheet_url }}" target="_blank" rel="noopener">открыть в Google</a>
+        </p>
+        <p class="text-secondary small mb-3">
+          Читаются два листа: <code>teachers</code> — справочник преподавателей,
+          <code>subject_teachers</code> — кто какой предмет ведёт. Имена листов должны быть
+          написаны ровно так, латинскими буквами.
+        </p>
+        {% if perms.journal_links.change_classsheetlink %}
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{% url 'school_years:run_subject_teacher_import' %}">
+              {% csrf_token %}
+              <input type="hidden" name="school_year" value="{{ school_year.pk }}">
+              <input type="hidden" name="dry_run" value="1">
+              <button class="btn btn-outline-primary" type="submit">Пробный прогон</button>
+            </form>
+            <form method="post" action="{% url 'school_years:run_subject_teacher_import' %}">
+              {% csrf_token %}
+              <input type="hidden" name="school_year" value="{{ school_year.pk }}">
+              <button class="btn btn-primary" type="submit">Импортировать</button>
+            </form>
+          </div>
+          <p class="text-secondary small mb-0 mt-2">
+            Пробный прогон ничего не меняет: он читает таблицу и показывает, что в ней не так.
+          </p>
+        {% else %}
+          <p class="text-secondary mb-0">У вас нет прав на запуск импорта.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </section>
+
+  {% if last_run %}
+    {% if result.dry_run %}
+      <div class="alert alert-info">Показан пробный прогон — в базе ничего не менялось.</div>
+    {% endif %}
+
+    <section class="row g-3 mb-4">
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Преподавателей</div>
+          <div class="h3 mb-0">{{ result.teachers_total|default:0 }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Связок предмет — класс</div>
+          <div class="h3 mb-0">{{ result.assignments_total|default:0 }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Классов</div>
+          <div class="h3 mb-0">{{ result.classes|length }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Проблем</div>
+          <div class="h3 mb-0 {% if issue_counts.critical %}text-danger{% endif %}">{{ issue_counts.critical|default:0 }}</div>
+        </div></div>
+      </div>
+    </section>
+
+    {% if critical_issues %}
+      <section class="card mb-4 border-danger">
+        <div class="card-header bg-white fw-semibold text-danger">Это нужно исправить в таблице</div>
+        <div class="card-body p-0">
+          <ul class="list-group list-group-flush">
+            {% for issue in critical_issues %}
+              <li class="list-group-item">
+                {{ issue.message }}
+                {% if issue.class_code %}<span class="badge badge-soft badge-queued ms-2">{{ issue.class_code }}</span>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+    {% endif %}
+
+    {% if other_issues %}
+      <section class="card mb-4">
+        <div class="card-header bg-white fw-semibold">Замечания</div>
+        <div class="card-body p-0">
+          <ul class="list-group list-group-flush">
+            {% for issue in other_issues %}
+              <li class="list-group-item text-secondary">{{ issue.message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+    {% endif %}
+
+    {% if sync %}
+      <section class="card mb-4">
+        <div class="card-header bg-white fw-semibold">Что изменилось в базе</div>
+        <div class="card-body">
+          <div class="row g-4">
+            <div class="col-12 col-lg-6">
+              <h3 class="h6">Справочник преподавателей</h3>
+              <table class="table table-sm mb-0">
+                <tbody>
+                  <tr><th>Заведено</th><td>{{ sync.teachers.created }}</td></tr>
+                  <tr><th>Обновлено</th><td>{{ sync.teachers.updated }}</td></tr>
+                  <tr><th>Без изменений</th><td>{{ sync.teachers.unchanged }}</td></tr>
+                  <tr><th>Отключено</th><td>{{ sync.teachers.deactivated }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="col-12 col-lg-6">
+              <h3 class="h6">Связки предмет — класс</h3>
+              <table class="table table-sm mb-0">
+                <tbody>
+                  <tr><th>Заведено</th><td>{{ sync.assignments.created }}</td></tr>
+                  <tr><th>Обновлено</th><td>{{ sync.assignments.updated }}</td></tr>
+                  <tr><th>Без изменений</th><td>{{ sync.assignments.unchanged }}</td></tr>
+                  <tr><th>Отключено</th><td>{{ sync.assignments.deactivated }}</td></tr>
+                  <tr><th>Классов импортировано</th><td>{{ sync.assignments.classes_imported }}</td></tr>
+                  <tr><th>Классов пропущено из-за ошибок</th><td>{{ sync.assignments.classes_skipped }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% if sync.assignments.classes_unknown %}
+            <div class="alert alert-warning mt-3 mb-0">
+              В таблице есть классы, которых нет в составе классов:
+              {{ sync.assignments.classes_unknown|join:", " }}.
+              Либо импортируйте состав классов, либо проверьте написание кода.
+            </div>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
+  {% endif %}
+
+  {% if assignments %}
+    <section class="card">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-semibold">Сейчас в базе</span>
+        <span class="text-secondary small">связок {{ assignments|length }} · преподавателей {{ teachers|length }}</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Класс</th>
+                <th>Предмет</th>
+                <th>Группа</th>
+                <th>Преподаватель</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in assignments %}
+                <tr>
+                  <td>{{ item.class_group.class_code }}</td>
+                  <td>{{ item.subject_name }}</td>
+                  <td>{{ item.group_name|default:"—" }}</td>
+                  <td>{{ item.teacher.display_name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

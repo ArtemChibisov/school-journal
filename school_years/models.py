@@ -470,3 +470,98 @@ class ParentReportSendRun(models.Model):
 
     def __str__(self) -> str:
         return f"{self.school_year} / {self.module.get_number_display()} / {self.status}"
+
+
+class Teacher(models.Model):
+    """One person, with the spellings the journals use for them.
+
+    The school names a teacher in the language the class is taught in, so the same person is
+    written `Юлия Галкина` in the А classes and `Yuliya Galkina` in the К ones. Either spelling
+    resolves to this row, which is what stops the monitoring table counting one person twice.
+
+    Both names are optional on their own but not together: a row with neither names nobody.
+    Which one is required depends on where the teacher actually teaches, and only the
+    assignments can say that - see `docs/data_contracts/teachers_contract.md`.
+    """
+
+    school_year = models.ForeignKey(SchoolYear, on_delete=models.CASCADE, related_name="teachers")
+    name_ru = models.CharField(max_length=255, blank=True, default="")
+    name_en = models.CharField(max_length=255, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["school_year", "name_ru", "name_en"]
+        indexes = [
+            models.Index(fields=["school_year", "is_active"]),
+            models.Index(fields=["name_ru"]),
+            models.Index(fields=["name_en"]),
+        ]
+
+    @property
+    def display_name(self) -> str:
+        return self.name_ru or self.name_en
+
+    def clean(self):
+        super().clean()
+        if not (self.name_ru or "").strip() and not (self.name_en or "").strip():
+            raise ValidationError("A teacher needs at least one spelling of their name.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.display_name
+
+
+class SubjectTeacher(models.Model):
+    """Who teaches which subject in which class, as the input table states it.
+
+    A snapshot of the `subject_teachers` sheet. Keeping it in the database rather than reading
+    the sheet on demand means preflight and generation do not depend on Google being reachable
+    at that moment, and a failed import leaves the previous state intact.
+    """
+
+    school_year = models.ForeignKey(
+        SchoolYear, on_delete=models.CASCADE, related_name="subject_teachers"
+    )
+    class_group = models.ForeignKey(
+        ClassGroup, on_delete=models.CASCADE, related_name="subject_teachers"
+    )
+    teacher = models.ForeignKey(
+        Teacher, on_delete=models.PROTECT, related_name="subject_assignments"
+    )
+    subject_name = models.CharField(max_length=255)
+    group_name = models.CharField(max_length=255, blank=True, default="")
+    teacher_role = models.CharField(max_length=64, default="subject_teacher")
+    source_sheet_name = models.CharField(max_length=255, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["school_year", "class_group", "subject_name", "group_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["class_group", "subject_name", "group_name", "teacher"],
+                name="uq_subjectteacher_class_subject_group_teacher",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["school_year", "is_active"]),
+            models.Index(fields=["class_group"]),
+            models.Index(fields=["teacher"]),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.school_year_id and self.class_group_id and self.class_group.school_year_id != self.school_year_id:
+            raise ValidationError({"class_group": "Class must belong to the same school year."})
+        if self.school_year_id and self.teacher_id and self.teacher.school_year_id != self.school_year_id:
+            raise ValidationError({"teacher": "Teacher must belong to the same school year."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.class_group.class_code} / {self.subject_name} / {self.teacher}"

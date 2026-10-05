@@ -29,7 +29,18 @@ from .forms import (
 )
 from .imports.registers import JOB_TYPE as SCAN_JOB_TYPE, run_register_scan
 from .imports.roster_sync import JOB_TYPE as ROSTER_JOB_TYPE, import_class_roster
-from .models import ClassGroup, ClassRegister, SchoolModule, SchoolYear
+from .imports.subject_teacher_sync import (
+    JOB_TYPE as SUBJECT_JOB_TYPE,
+    import_subject_teachers,
+)
+from .models import (
+    ClassGroup,
+    ClassRegister,
+    SchoolModule,
+    SchoolYear,
+    SubjectTeacher,
+    Teacher,
+)
 
 VIEW_PERMISSION = "jobs.view_jobrun"
 RUN_PERMISSION = "journal_links.change_classsheetlink"
@@ -45,8 +56,8 @@ def _selected_school_year(request) -> SchoolYear | None:
     return SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
 
 
-def _latest_import(school_year_id: int | None) -> JobRun | None:
-    queryset = JobRun.objects.filter(job_type=ROSTER_JOB_TYPE)
+def _latest_run(job_type: str, school_year_id: int | None) -> JobRun | None:
+    queryset = JobRun.objects.filter(job_type=job_type)
     if school_year_id is not None:
         queryset = queryset.filter(params_json__school_year_id=school_year_id)
     return queryset.order_by("-started_at").first()
@@ -125,7 +136,7 @@ def school_year_settings(request):
 @permission_required_403(VIEW_PERMISSION)
 def roster_import(request):
     school_year = _selected_school_year(request)
-    last_run = _latest_import(school_year.pk if school_year else None)
+    last_run = _latest_run(ROSTER_JOB_TYPE, school_year.pk if school_year else None)
     result = (last_run.result_json if last_run else {}) or {}
 
     issues = result.get("issues", [])
@@ -192,6 +203,93 @@ def run_roster_import(request):
         messages.warning(request, f"{prefix} завершён: классов без ошибок {valid}, проблем {critical}.")
     else:
         messages.success(request, f"{prefix} завершён: классов без ошибок {valid}, проблем нет.")
+
+    return redirect(target)
+
+
+@login_required
+@permission_required_403(VIEW_PERMISSION)
+def subject_teachers(request):
+    """The subject-teacher table as it was last read, and the button to read it again."""
+
+    school_year = _selected_school_year(request)
+    last_run = _latest_run(SUBJECT_JOB_TYPE, school_year.pk if school_year else None)
+    result = (last_run.result_json if last_run else {}) or {}
+    issues = result.get("issues", [])
+
+    assignments = (
+        SubjectTeacher.objects.filter(school_year=school_year, is_active=True)
+        .select_related("class_group", "teacher")
+        .order_by("class_group__grade_number", "class_group__class_code", "subject_name")
+        if school_year
+        else SubjectTeacher.objects.none()
+    )
+
+    return render(
+        request,
+        "school_years/subject_teachers.html",
+        {
+            "school_year": school_year,
+            "school_years": SchoolYear.objects.all(),
+            "last_run": last_run,
+            "result": result,
+            "sync": result.get("sync", {}),
+            "issue_counts": result.get("issue_counts", {}),
+            "critical_issues": [item for item in issues if item["severity"] == "critical"],
+            "other_issues": [item for item in issues if item["severity"] != "critical"],
+            "assignments": assignments,
+            "teachers": (
+                Teacher.objects.filter(school_year=school_year, is_active=True)
+                if school_year
+                else Teacher.objects.none()
+            ),
+        },
+    )
+
+
+@login_required
+@permission_required_403(RUN_PERMISSION)
+@require_POST
+def run_subject_teacher_import(request):
+    school_year = _selected_school_year(request)
+    redirect_url = reverse("school_years:subject_teachers")
+    dry_run = request.POST.get("dry_run") == "1"
+
+    if school_year is None:
+        messages.error(request, "Сначала создайте учебный год.")
+        return redirect(redirect_url)
+
+    target = f"{redirect_url}?school_year={school_year.pk}"
+
+    try:
+        _, sheets = build_clients()
+    except GoogleIntegrationError as exc:
+        messages.error(request, exc.user_message)
+        return redirect(target)
+
+    job_run = import_subject_teachers(
+        school_year,
+        sheets=sheets,
+        initiated_by=request.user,
+        dry_run=dry_run,
+    )
+
+    result = job_run.result_json or {}
+    if "error" in result:
+        messages.error(request, result["error"]["user_message"])
+        return redirect(target)
+
+    prefix = "Пробный прогон" if dry_run else "Импорт"
+    critical = result.get("issue_counts", {}).get("critical", 0)
+    message = (
+        f"{prefix} завершён: преподавателей {result.get('teachers_total', 0)}, "
+        f"связок {result.get('assignments_total', 0)}"
+    )
+
+    if critical:
+        messages.warning(request, f"{message}, проблем {critical}.")
+    else:
+        messages.success(request, f"{message}, проблем нет.")
 
     return redirect(target)
 
