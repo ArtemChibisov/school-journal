@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 class TeacherContact(models.Model):
@@ -80,3 +81,41 @@ class NotificationEvent(models.Model):
             f"{self.teacher_name} -> {self.job_run_id} "
             f"[{self.channel}:{self.status}]"
         )
+
+
+class ReminderMute(models.Model):
+    """A teacher the завуч has decided not to chase for the current module.
+
+    Some gaps are a decision, not an oversight. The Drama teacher wrote in the journal that he
+    deliberately ran module 1 without criteria and would introduce them in module 2; the check
+    is right that criteria are missing, and reminding him every half hour would be wrong.
+
+    The mute is tied to one module on purpose. His own note says `in the second module I will`,
+    so silence should end when that module does - nobody has to remember to switch him back on.
+    """
+
+    module = models.ForeignKey(
+        "school_years.SchoolModule", on_delete=models.CASCADE, related_name="reminder_mutes"
+    )
+    teacher = models.ForeignKey(
+        "school_years.Teacher", on_delete=models.CASCADE, related_name="reminder_mutes"
+    )
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reminder_mutes",
+    )
+
+    class Meta:
+        ordering = ["module", "teacher"]
+        constraints = [
+            models.UniqueConstraint(fields=["module", "teacher"], name="uq_remindermute_module_teacher")
+        ]
+        indexes = [models.Index(fields=["module", "teacher"])]
+
+    def __str__(self) -> str:
+        return f"{self.teacher} muted for {self.module}"

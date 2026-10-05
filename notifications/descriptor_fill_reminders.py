@@ -12,6 +12,7 @@ from jobs.models import JobLog, JobRun
 from jobs.services import log_step
 from journal_links.descriptor_fill_report import MAX_TEACHER_NAME_LENGTH, REPORT_JOB_TYPE, rows_from_job_run
 from notifications.models import NotificationEvent, TeacherContact
+from notifications.reminder_mutes import current_module, is_muted
 from notifications.services import send_telegram
 
 JOB_TYPE = "descriptor_fill_reminders"
@@ -220,6 +221,7 @@ def send_descriptor_fill_reminders(source_job_run: JobRun, *, initiated_by=None)
         "teachers_total": 0,
         "sent": 0,
         "skipped_no_teacher": 0,
+        "skipped_muted": 0,
         "skipped_no_contact": 0,
         "skipped_duplicate": 0,
         "failed": 0,
@@ -233,9 +235,25 @@ def send_descriptor_fill_reminders(source_job_run: JobRun, *, initiated_by=None)
         summary["teachers_total"] = len(grouped_by_teacher)
         summary["skipped_no_teacher"] = skipped_no_teacher
 
+        module = current_module()
         for teacher_name in sorted(grouped_by_teacher):
             payload = grouped_by_teacher[teacher_name]
             payload_hash = _payload_hash(payload)
+
+            # A teacher the завуч has taken off the list for this module. Checked before the
+            # contact is resolved: being silenced is a decision, and it should hold whether or
+            # not we happen to know where to send.
+            if is_muted(teacher_name, module=module):
+                summary["skipped_muted"] += 1
+                teacher_results.append(_teacher_result(payload, status="skipped", reason="skipped_muted"))
+                _log(
+                    reminder_job,
+                    JobLog.Level.INFO,
+                    "Reminder skipped: muted for this module",
+                    {"teacher": teacher_name, "module": str(module) if module else ""},
+                )
+                continue
+
             contact, skip_reason = _resolve_contact(teacher_name)
 
             if skip_reason:

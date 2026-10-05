@@ -31,6 +31,7 @@ urlpatterns = [
     path("", include("pipeline.urls")),
     path("", include("google_integration.urls")),
     path("", include("school_years.urls")),
+    path("", include("notifications.urls")),
     path("logs/", event_log, name="event_log"),
     path("runs/", list_job_runs, name="job_run_list"),
     path("runs/full-pipeline/start/", run_full_pipeline_view, name="run_full_pipeline"),

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block page_title %}Напоминания{% endblock %}
+{% block page_heading %}Напоминания{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn-outline-secondary" href="{% url 'journal_links:descriptor_criteria_fill_report' %}">Отчёт заполненности</a>
+{% endblock %}
+
+{% block content %}
+  <section class="card mb-4">
+    <div class="card-body">
+      {% if not module %}
+        <div class="alert alert-warning mb-0">
+          Модуль не заведён. Напоминания привязаны к модулю, поэтому
+          <a href="{% url 'school_years:module_registers' %}">сначала создайте его</a>.
+        </div>
+      {% elif not job_run %}
+        <div class="alert alert-info mb-0">
+          Проверка заполненности ещё не отрабатывала, напоминать не о чем.
+        </div>
+      {% else %}
+        <p class="mb-1">
+          Модуль: <strong>{{ module.get_number_display }}</strong>
+          <span class="text-secondary">({{ module.starts_on }} — {{ module.ends_on }})</span>
+        </p>
+        <p class="text-secondary small mb-0">
+          Снятая галка выключает напоминания <strong>только в этом модуле</strong>.
+          В следующем преподаватель снова попадёт в список — включать обратно не нужно.
+        </p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if rows %}
+    <section class="row g-3 mb-4">
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Преподавателей в списке</div>
+          <div class="h3 mb-0">{{ rows|length }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Выключено на этот модуль</div>
+          <div class="h3 mb-0">{{ muted_total }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Без Telegram</div>
+          <div class="h3 mb-0 {% if no_contact_total %}text-warning{% endif %}">{{ no_contact_total }}</div>
+        </div></div>
+      </div>
+    </section>
+
+    {% if unknown_total %}
+      <div class="alert alert-warning">
+        У {{ unknown_total }} строк имя из журнала не нашлось в справочнике преподавателей,
+        поэтому выключить их нельзя. Обычно это значит, что в ячейке записаны двое через запятую
+        или написание расходится со справочником.
+      </div>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th style="width: 8rem;">Напоминать</th>
+                <th>Преподаватель</th>
+                <th style="width: 7rem;">Всего</th>
+                <th style="width: 8rem;">Дескриптор</th>
+                <th style="width: 8rem;">Критерии</th>
+                <th style="width: 7rem;">Оценки</th>
+                <th style="width: 10rem;">Telegram</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr {% if row.muted %}class="text-secondary"{% endif %}>
+                  <td>
+                    {% if not row.known %}
+                      <span class="text-secondary small">нет в справочнике</span>
+                    {% elif can_edit %}
+                      <form method="post" action="{% url 'notifications:toggle_reminder_mute' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="teacher_id" value="{{ row.teacher_id }}">
+                        <input type="hidden" name="muted" value="{% if row.muted %}0{% else %}1{% endif %}">
+                        <button type="submit" class="btn btn-sm {% if row.muted %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}">
+                          {% if row.muted %}включить{% else %}выключить{% endif %}
+                        </button>
+                      </form>
+                    {% else %}
+                      {% if row.muted %}выключено{% else %}да{% endif %}
+                    {% endif %}
+                  </td>
+                  <td>
+                    {{ row.teacher_name }}
+                    {% if row.muted %}<span class="badge badge-soft badge-queued ms-2">не напоминаем</span>{% endif %}
+                  </td>
+                  <td>{{ row.total }}</td>
+                  <td>{{ row.descriptor_count }}</td>
+                  <td>{{ row.criteria_count }}</td>
+                  <td>{{ row.grades_count }}</td>
+                  <td>
+                    {% if row.has_contact %}
+                      <span class="badge badge-soft badge-success">привязан</span>
+                    {% else %}
+                      <span class="badge badge-soft badge-partial">нет</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {% elif job_run %}
+    <section class="card">
+      <div class="card-body">
+        <p class="mb-0 text-secondary">По последней проверке напоминать некому — всё заполнено.</p>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

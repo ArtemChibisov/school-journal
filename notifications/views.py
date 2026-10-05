@@ -1,9 +1,22 @@
 import json
 import re
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+from admin_panel.authz import permission_required_403
+from journal_links.descriptor_fill_report import (
+    REPORT_JOB_TYPE,
+    REPORT_STATUSES,
+    build_teacher_groups,
+    rows_from_job_run,
+)
+from school_years.models import Teacher
 
 from jobs.models import JobLog, JobRun
 from jobs.services import log_step
@@ -12,6 +25,7 @@ from pipeline.audit import log_criterion_event
 from pipeline.models import CriterionEntry
 from .models import TeacherConfirmation, TeacherContact
 from .recheck import run_teacher_recheck_job
+from .reminder_mutes import current_module, muted_teacher_ids, resolve_teacher, set_muted
 from .services import TelegramSendError, send_telegram
 
 
@@ -332,3 +346,73 @@ def telegram_webhook(request: HttpRequest) -> JsonResponse:
     status = _handle_teacher_confirmation(contact, text)
     return JsonResponse({"ok": True, "status": status})
 
+
+
+@login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр напоминаний.")
+def reminder_list(request):
+    """Who would be reminded in this module, and the tick that stops it."""
+
+    module = current_module()
+    job_run = (
+        JobRun.objects.filter(job_type=REPORT_JOB_TYPE, status__in=REPORT_STATUSES)
+        .order_by("-started_at")
+        .first()
+    )
+    groups = build_teacher_groups(rows_from_job_run(job_run)) if job_run else []
+    muted = muted_teacher_ids(module) if module else set()
+
+    rows = []
+    for group in groups:
+        teacher = (
+            resolve_teacher(group["teacher_name"], school_year=module.school_year)
+            if module
+            else None
+        )
+        contact = TeacherContact.objects.filter(name__iexact=group["teacher_name"]).first()
+        rows.append(
+            {
+                **group,
+                "teacher_id": teacher.pk if teacher else None,
+                "known": teacher is not None,
+                "muted": bool(teacher and teacher.pk in muted),
+                "has_contact": bool(contact and contact.is_active and contact.chat_id),
+            }
+        )
+
+    return render(
+        request,
+        "notifications/reminder_list.html",
+        {
+            "module": module,
+            "job_run": job_run,
+            "rows": rows,
+            "can_edit": request.user.has_perm("jobs.send_reminders"),
+            "muted_total": sum(1 for row in rows if row["muted"]),
+            "unknown_total": sum(1 for row in rows if not row["known"]),
+            "no_contact_total": sum(1 for row in rows if row["known"] and not row["has_contact"]),
+        },
+    )
+
+
+@login_required
+@permission_required_403("jobs.send_reminders", message="Доступ запрещён: нельзя менять напоминания.")
+@require_POST
+def toggle_reminder_mute(request):
+    module = current_module()
+    if module is None:
+        messages.error(request, "Сначала заведите модуль на экране «Журналы модуля».")
+        return redirect("notifications:reminder_list")
+
+    teacher = get_object_or_404(Teacher, pk=request.POST.get("teacher_id"))
+    muted = request.POST.get("muted") == "1"
+    set_muted(module=module, teacher=teacher, muted=muted, user=request.user)
+
+    if muted:
+        messages.success(
+            request,
+            f"{teacher.display_name} не будет получать напоминания в модуле {module.get_number_display()}.",
+        )
+    else:
+        messages.success(request, f"{teacher.display_name} снова получает напоминания.")
+    return redirect("notifications:reminder_list")
