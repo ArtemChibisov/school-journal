@@ -53,12 +53,28 @@ class Subject:
 NO_GRADE_MARKS = {'', '-', '--', '–', '—', '−'}
 
 
+def parse_number(text):
+    """Число из ячейки. Запятая и точка равноправны: 40,5 и 40.5 - одна и та же оценка.
+
+    Ячейка с запятой приходит из таблицы текстом, а не числом, поэтому без этого разбора
+    она уходила в путь "непонятное значение" и в отчёт не попадала вовсе.
+    """
+    try:
+        return float(str(text).strip().replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+
+
+def bucket_number(number):
+    for key, value in m.marks_dict.items():
+        if value['bounds'][0] < number <= value['bounds'][1]:
+            return [value['order'], key, number]
+    return [-1, 'NOT_FOUND']
+
+
 def enrich_mark(mark_value):
     if isinstance(mark_value, (int, float)):
-        for key, value in m.marks_dict.items():
-            if value['bounds'][0] < mark_value <= value['bounds'][1]:
-                return [value['order'], key, mark_value]
-        return [-1, 'NOT_FOUND']
+        return bucket_number(mark_value)
     else:
         try:
             result = [m.marks_dict[mark_value]['order'], mark_value]
@@ -70,8 +86,10 @@ def enrich_mark(mark_value):
             # прочерк, который он сам и рисует для пустой оценки.
             if isinstance(mark_value, str) and mark_value.strip() in NO_GRADE_MARKS:
                 return [-1, 'NOT_FOUND']
-            else:
-                return [-2, mark_value]
+            number = parse_number(mark_value)
+            if number is not None:
+                return bucket_number(number)
+            return [-2, mark_value]
 
 
 

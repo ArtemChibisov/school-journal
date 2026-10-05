@@ -12,7 +12,8 @@ What the report does with a cell:
 
 - the exact text of a scale level, which is what teachers pick from the dropdown, ticks that
   column. This is the ordinary case and by far the most common;
-- a number falls into the band where `low < value <= high`, and ticks it;
+- a number falls into the band where `low < value <= high`, and ticks it. A comma and a
+  point are the same thing, so `40,5` counts;
 - a dash means no grade was given, and the row is drawn as dashes;
 - anything else is kept raw and handed to the renderer, which hunts through it for a letter
   grade and a number. `70 - B` and `86, A` survive this and are printed as `70% B`. Something
@@ -78,15 +79,15 @@ def scale_for_band(grade_band: str):
 
 
 def _as_number(text: str) -> float | None:
-    """A number the way a spreadsheet hands one over - never with a comma.
+    """A number from a cell. A comma and a point mean the same thing: 40,5 is 40.5.
 
-    `enrich_mark` only treats a cell as numeric when openpyxl already gave it as int or float,
-    so `40,5` typed as text stays text and goes down the unrecognised path.
+    A cell typed with a comma reaches us as text rather than as a number, so without this it
+    would take the unrecognised path and never reach the report at all.
     """
 
     try:
-        return float(text)
-    except ValueError:
+        return float(text.strip().replace(",", "."))
+    except (AttributeError, ValueError):
         return None
 
 

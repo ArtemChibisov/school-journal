@@ -90,10 +90,16 @@ class ClassifyGradeTests(SimpleTestCase):
 
         self.assertEqual(verdict.verdict, VERDICT_LOST)
 
-    def test_a_comma_decimal_is_reported(self):
-        """openpyxl hands it over as text, and enrich_mark only buckets real numbers."""
+    def test_a_comma_and_a_point_mean_the_same_number(self):
+        comma = classify_grade("40,5", grade_band=BAND_MIDDLE_HIGH)
+        point = classify_grade("40.5", grade_band=BAND_MIDDLE_HIGH)
 
-        self.assertEqual(classify_grade("40,5", grade_band=BAND_MIDDLE_HIGH).verdict, VERDICT_LOST)
+        self.assertEqual(comma.verdict, VERDICT_NUMBER)
+        self.assertEqual(comma.label, point.label)
+
+    def test_a_comma_number_lands_in_the_right_band(self):
+        self.assertIn("Beginner", classify_grade("40,5", grade_band=BAND_MIDDLE_HIGH).label)
+        self.assertIn("Meets", classify_grade("78,5", grade_band=BAND_MIDDLE_HIGH).label)
 
     def test_every_kind_of_dash_means_no_grade(self):
         """Teachers write the dash several ways - and the report draws one just like it."""
