@@ -26,6 +26,7 @@ from validation.descriptor_criteria_fill import (
     JOB_TYPE as DESCRIPTOR_CRITERIA_FILL_JOB_TYPE,
     enqueue_descriptor_criteria_fill_check_job,
 )
+from validation.grade_value_check import JOB_TYPE as GRADE_JOB_TYPE, run_grade_value_check
 from validation.job_runner import run_check_missing_data_job, run_validation_job
 
 from .descriptor_fill_report import (
@@ -498,3 +499,56 @@ def google_oauth_callback(request):
 
     messages.success(request, f"Google OAuth подключён. Токен сохранён: {token_path}")
     return redirect(next_url)
+
+
+@login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр проверки оценок.")
+def grade_value_report(request):
+    """Grades the report would not understand, before the report is built."""
+
+    job_run = (
+        JobRun.objects.filter(job_type=GRADE_JOB_TYPE)
+        .order_by("-started_at")
+        .first()
+    )
+    result = (job_run.result_json if job_run else {}) or {}
+
+    return render(
+        request,
+        "journal_links/grade_value_report.html",
+        {
+            "job_run": job_run,
+            "result": result,
+            "problems": result.get("problems", []),
+            "by_value": result.get("by_value", []),
+            "can_run": request.user.has_perm("jobs.run_validation"),
+            "class_options": sorted(
+                ClassSheetLink.objects.filter(is_active=True)
+                .values_list("class_code", flat=True)
+                .distinct()
+            ),
+        },
+    )
+
+
+@login_required
+@permission_required_403("jobs.run_validation", message="Доступ запрещён: нельзя запускать проверку оценок.")
+@require_POST
+def run_grade_value_check_view(request):
+    class_code = (request.POST.get("class_code") or "").strip() or None
+    job_run = run_grade_value_check(class_code=class_code, initiated_by=request.user)
+
+    result = job_run.result_json or {}
+    total = result.get("problems_total", 0)
+    if total:
+        messages.warning(
+            request,
+            f"Проверка завершена: непонятных значений {total} "
+            f"в {result.get('classes_checked', 0)} классах.",
+        )
+    else:
+        messages.success(
+            request,
+            f"Проверка завершена: в {result.get('classes_checked', 0)} классах все оценки читаются.",
+        )
+    return redirect("journal_links:grade_value_report")

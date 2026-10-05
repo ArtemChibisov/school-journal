@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block page_title %}Проверка оценок{% endblock %}
+{% block page_heading %}Проверка оценок{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn-outline-secondary" href="{% url 'journal_links:list_links' %}">Классы и таблицы</a>
+  {% if job_run %}
+    <a class="btn btn-outline-secondary" href="{% url 'job_run_detail' job_run.id %}">Технические логи</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <section class="card mb-4">
+    <div class="card-body">
+      <p class="text-secondary mb-3">
+        Проверяет не наличие оценки, а <strong>само значение</strong>: прогоняет его по тем же
+        правилам, по которым строится отчёт родителям. Всё, что отчёт не понял бы, попадает в
+        список ниже — чтобы увидеть это до генерации документов, а не после.
+      </p>
+      {% if can_run %}
+        <form method="post" action="{% url 'journal_links:run_grade_value_check' %}" class="row g-3 align-items-end">
+          {% csrf_token %}
+          <div class="col-12 col-md-6 col-xl-4">
+            <label class="form-label" for="id_class_code">Класс</label>
+            <select id="id_class_code" name="class_code" class="form-select">
+              <option value="">Все классы</option>
+              {% for code in class_options %}
+                <option value="{{ code }}">{{ code }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-auto">
+            <button class="btn btn-primary" type="submit">Проверить оценки</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="mb-0 text-secondary">У вас нет прав на запуск проверки.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if job_run %}
+    <section class="row g-3 mb-4">
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Непонятных значений</div>
+          <div class="h3 mb-0 {% if result.problems_total %}text-danger{% endif %}">{{ result.problems_total|default:0 }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Классов проверено</div>
+          <div class="h3 mb-0">{{ result.classes_checked|default:0 }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Листов проверено</div>
+          <div class="h3 mb-0">{{ result.sheets_checked|default:0 }}</div>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100"><div class="card-body">
+          <div class="text-secondary small">Классов не прочиталось</div>
+          <div class="h3 mb-0 {% if result.classes_failed %}text-warning{% endif %}">{{ result.classes_failed|default:0 }}</div>
+        </div></div>
+      </div>
+    </section>
+
+    {% if by_value %}
+      <section class="card mb-4">
+        <div class="card-header bg-white fw-semibold">Какие значения встречаются</div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead><tr><th style="width: 20rem;">Написано в журнале</th><th>Сколько раз</th></tr></thead>
+            <tbody>
+              {% for value, count in by_value %}
+                <tr><td><code>{{ value }}</code></td><td>{{ count }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+
+    {% if problems %}
+      {% if result.truncated %}
+        <div class="alert alert-info">
+          Показаны первые {{ problems|length }} из {{ result.problems_total }}. Исправьте эти и запустите снова.
+        </div>
+      {% endif %}
+
+      <section class="card">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 6rem;">Класс</th>
+                  <th>Предмет</th>
+                  <th>Ученик</th>
+                  <th>Критерий</th>
+                  <th style="width: 9rem;">Значение</th>
+                  <th>Почему</th>
+                  <th style="width: 6rem;">Журнал</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for problem in problems %}
+                  <tr>
+                    <td>{{ problem.class_code }}</td>
+                    <td>{{ problem.subject_name }}</td>
+                    <td>{{ problem.student_name|default:"—" }}</td>
+                    <td class="small">{{ problem.criterion }}</td>
+                    <td><code>{{ problem.value }}</code></td>
+                    <td class="small text-secondary">{{ problem.reason }}</td>
+                    <td>
+                      {% if problem.sheet_url %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ problem.sheet_url }}" target="_blank" rel="noopener">открыть</a>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    {% else %}
+      <section class="card">
+        <div class="card-body">
+          <p class="mb-0 text-secondary">
+            Все оценки читаются — отчёт поймёт каждое значение.
+          </p>
+        </div>
+      </section>
+    {% endif %}
+  {% endif %}
+{% endblock %}
