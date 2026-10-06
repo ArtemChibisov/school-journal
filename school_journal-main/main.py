@@ -342,7 +342,9 @@ def fill_header(
             "SchoolYear": school_year or "",
             "TutorName": tutor_name or "",
             "TutorText": tutor_text_final or "",
-            "HasTutor": bool(tutor_text_final),
+            # Whether the страница belongs in this report at all, not whether anyone wrote
+            # on it: a 4-11 report keeps the page empty, so an unwritten comment is visible.
+            "ShowTutor": bool(include_tutor),
         }
 
         # 4) Рендер/сохранение

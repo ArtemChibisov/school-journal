@@ -49,6 +49,40 @@ class FirstPageTemplateTests(SimpleTestCase):
         self.assertNotRegex(template_text(), r"\d\d\.\d\d\s*[-–]\s*\d\d\.\d\d")
 
 
+class TutorPageTests(SimpleTestCase):
+    """0-3 reports have no tutor page at all; 4-11 reports always do.
+
+    The rule lived only in `include_tutor`, which emptied the text and left the page: the
+    heading «Комментарий от тьютора» printed over nothing, and «Тьютор | Grade-level tutor:»
+    ended at the colon, looking exactly like a tutor who had not bothered.
+
+    The page break goes with the table. Removing the table alone would leave 0-3 reports with
+    a blank page where the comment used to be.
+    """
+
+    def test_the_whole_page_is_conditional(self):
+        document = template_document()
+
+        self.assertIn("{%p if ShowTutor %}", document)
+        self.assertIn("{%p endif %}", document)
+
+    def test_the_page_break_is_inside_the_condition(self):
+        document = template_document()
+        start = document.index("{%p if ShowTutor %}")
+        end = document.index("{%p endif %}")
+
+        self.assertLess(start, document.index("Комментарий от тьютора"))
+        self.assertLess(document.index("Комментарий от тьютора"), end)
+        self.assertEqual(document.count('<w:br w:type="page"/>', start, end), 1)
+
+    def test_the_signatures_stay_whatever_happens(self):
+        """Завуч and Директор sign every report, tutor page or no tutor page."""
+
+        document = template_document()
+
+        self.assertLess(document.index("{%p endif %}"), document.index("Assistant Principal"))
+
+
 class LogoTests(SimpleTestCase):
     """The logo used to float, and a floating image is placed by whoever opens the file.
 
