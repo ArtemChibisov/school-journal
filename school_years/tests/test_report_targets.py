@@ -97,7 +97,28 @@ class DocxTargetTests(TestCase):
         self.assertFalse(target.is_ready)
         self.assertIn("9Z", target.missing)
 
-    def test_a_missing_folder_is_refused_and_says_which_one(self):
+    def test_the_year_folder_is_used_when_the_module_has_none(self):
+        """Setting it once for the year is enough; a module overrides only if it wants to."""
+
+        self.module.docx_folder_4_11_url = ""
+        self.module.save()
+        self.year.docx_root_4_11_url = "https://drive.google.com/drive/folders/yearrootsenior"
+        self.year.save()
+        self._class("7А", 7)
+
+        target = docx_target_for_class(self.module, "7А")
+
+        self.assertTrue(target.is_ready)
+        self.assertEqual(target.docx_folder_url, "https://drive.google.com/drive/folders/yearrootsenior")
+
+    def test_the_module_folder_wins_over_the_year_one(self):
+        self.year.docx_root_4_11_url = "https://drive.google.com/drive/folders/yearrootsenior"
+        self.year.save()
+        self._class("7А", 7)
+
+        self.assertEqual(docx_target_for_class(self.module, "7А").docx_folder_url, SENIOR_FOLDER)
+
+    def test_with_no_folder_anywhere_the_run_is_refused(self):
         self.module.docx_folder_4_11_url = ""
         self.module.save()
         self._class("7А", 7)
@@ -106,6 +127,7 @@ class DocxTargetTests(TestCase):
 
         self.assertFalse(target.is_ready)
         self.assertIn("4-11", target.missing)
+        self.assertIn("ни у модуля", target.missing)
 
     def test_the_other_folder_missing_does_not_block_a_senior_class(self):
         self.module.docx_folder_0_3_url = ""

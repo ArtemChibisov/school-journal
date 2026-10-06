@@ -65,18 +65,63 @@
     {% endif %}
 
     <section class="row g-3 mb-4">
-      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Ученики</div><div class="display-6">{{ summary.students_found|default:0 }}</div></div></div></div>
-      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">DOCX создано</div><div class="display-6">{{ summary.docx_created|default:0 }}</div></div></div></div>
-      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Загружено</div><div class="display-6">{{ summary.uploaded_success|default:0 }}</div></div></div></div>
-      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Обновлено</div><div class="display-6">{{ summary.uploaded_updated|default:0 }}</div></div></div></div>
-      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Ошибки</div><div class="display-6">{{ summary.errors|default:0 }}</div></div></div></div>
-      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Статус</div><div class="h4 mb-0">{{ job_run.status }}</div></div></div></div>
+      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Классов всего</div><div class="display-6">{{ counters.classes_total }}</div></div></div></div>
+      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Готово</div><div class="display-6">{{ counters.classes_done }}</div></div></div></div>
+      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Пропущено</div><div class="display-6 {% if counters.classes_skipped %}text-warning{% endif %}">{{ counters.classes_skipped }}</div></div></div></div>
+      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">С ошибкой</div><div class="display-6 {% if counters.classes_failed %}text-danger{% endif %}">{{ counters.classes_failed }}</div></div></div></div>
+      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">DOCX создано</div><div class="display-6">{{ counters.docx_created }}</div></div></div></div>
+      <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Загружено</div><div class="display-6">{{ counters.uploaded_success }}</div></div></div></div>
     </section>
+
+    {% if class_rows %}
+      <section class="card mb-4">
+        <div class="card-header bg-white fw-semibold">Классы</div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 7rem;">Класс</th>
+                  <th style="width: 9rem;">Статус</th>
+                  <th style="width: 8rem;">DOCX</th>
+                  <th>Что не так</th>
+                  <th style="width: 7rem;">Детали</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in class_rows %}
+                  <tr>
+                    <td>{{ row.class_code }}</td>
+                    <td>
+                      {% if row.status == "skipped" %}
+                        <span class="badge badge-soft badge-partial">пропущен</span>
+                      {% elif row.status == "success" %}
+                        <span class="badge badge-soft badge-success">готово</span>
+                      {% else %}
+                        <span class="badge badge-soft badge-failed">{{ row.status }}</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ row.docx_created|default:"—" }}</td>
+                    <td class="small text-secondary">{{ row.reason|default:"" }}</td>
+                    <td>
+                      {% if row.job_run_id %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{% url 'job_run_detail' row.job_run_id %}">Открыть</a>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    {% endif %}
 
     <section class="card mb-4">
       <div class="card-body">
         <dl class="row mb-0">
-          <dt class="col-sm-3">Класс</dt><dd class="col-sm-9">{{ result.class_code|default:"—" }}</dd>
+          <dt class="col-sm-3">Что строили</dt>
+          <dd class="col-sm-9">{% if result.class_code %}класс {{ result.class_code }}{% elif result.module %}{{ result.module }}{% else %}—{% endif %}</dd>
           <dt class="col-sm-3">Модуль</dt><dd class="col-sm-9">{{ result.module_number|default:"—" }}</dd>
           <dt class="col-sm-3">Даты модуля</dt><dd class="col-sm-9">{{ result.module_dates|default:"—" }}</dd>
           <dt class="col-sm-3">Drive-папка</dt><dd class="col-sm-9">{% if result.drive_folder_url %}<a href="{{ result.drive_folder_url }}" target="_blank" rel="noopener">Открыть</a>{% else %}—{% endif %}</dd>

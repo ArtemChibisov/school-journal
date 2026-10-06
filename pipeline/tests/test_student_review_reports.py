@@ -133,6 +133,31 @@ class StudentReviewReportsViewTests(TestCase):
 
         self.assertIsNone(self.mock_enqueue.call_args.kwargs["class_codes"])
 
+    def test_a_skipped_class_shows_its_reason_on_the_screen(self):
+        """The run records why a class was skipped; the screen has to say it out loud."""
+
+        job_run = JobRun.objects.create(
+            job_type=MODULE_JOB_TYPE,
+            status=JobRun.Status.PARTIAL,
+            result_json={
+                "summary": {"classes_total": 1, "classes_skipped": 1, "classes_done": 0},
+                "classes": [
+                    {
+                        "class_code": "2А",
+                        "status": "skipped",
+                        "reason": "У модуля не указана папка DOCX 0-3",
+                    }
+                ],
+            },
+        )
+
+        response = self.client.get(
+            reverse("pipeline:student_review_reports"), {"run_id": job_run.id}
+        )
+
+        self.assertContains(response, "2А")
+        self.assertContains(response, "не указана папка DOCX 0-3")
+
     def test_the_module_is_required(self):
         self.mock_enqueue.return_value = JobRun.objects.create(
             job_type=MODULE_JOB_TYPE, status=JobRun.Status.PENDING

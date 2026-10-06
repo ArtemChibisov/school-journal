@@ -131,7 +131,14 @@ def filled_link_count(school_year: SchoolYear) -> tuple[int, int]:
     return filled, len(names)
 
 
-MODULE_FOLDER_FIELDS = ("register_folder_0_3_url", "register_folder_4_11_url")
+MODULE_FOLDER_FIELDS = (
+    "register_folder_0_3_url",
+    "register_folder_4_11_url",
+    "docx_folder_0_3_url",
+    "docx_folder_4_11_url",
+    "pdf_folder_0_3_url",
+    "pdf_folder_4_11_url",
+)
 
 MODULE_FIELD_LABELS = {
     "number": "Модуль",
@@ -140,6 +147,10 @@ MODULE_FIELD_LABELS = {
     "ends_on": "Окончание",
     "register_folder_0_3_url": "Папка журналов 0-3",
     "register_folder_4_11_url": "Папка журналов 4-11",
+    "docx_folder_0_3_url": "Папка DOCX 0-3",
+    "docx_folder_4_11_url": "Папка DOCX 4-11",
+    "pdf_folder_0_3_url": "Папка PDF 0-3",
+    "pdf_folder_4_11_url": "Папка PDF 4-11",
 }
 
 

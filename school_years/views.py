@@ -349,6 +349,15 @@ def module_registers(request):
         "school_years/module_registers.html",
         {
             "form": form,
+            "report_folder_fields": [
+                form[name]
+                for name in (
+                    "docx_folder_0_3_url",
+                    "docx_folder_4_11_url",
+                    "pdf_folder_0_3_url",
+                    "pdf_folder_4_11_url",
+                )
+            ],
             "school_year": school_year,
             "school_years": SchoolYear.objects.all(),
             "module": module,

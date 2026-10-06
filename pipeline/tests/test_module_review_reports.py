@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from google_integration.fakes import FakeDriveClient
 from jobs.models import JobRun
 from journal_links.models import ClassSheetLink
 from pipeline.module_review_reports import JOB_TYPE, run_module_review_reports_job
@@ -28,6 +29,12 @@ class ModuleReviewReportsTests(TestCase):
             docx_folder_4_11_url=SENIOR_FOLDER,
         )
         self.calls = []
+        self.drive = FakeDriveClient()
+        self.junior_root = self.drive.add_folder("DOCX 0-3")
+        self.senior_root = self.drive.add_folder("DOCX 4-11")
+        self.module.docx_folder_0_3_url = f"https://drive.google.com/drive/folders/{self.junior_root}"
+        self.module.docx_folder_4_11_url = f"https://drive.google.com/drive/folders/{self.senior_root}"
+        self.module.save()
 
     def _class(self, class_code, grade_number):
         ClassGroup.objects.create(
@@ -59,7 +66,7 @@ class ModuleReviewReportsTests(TestCase):
             "pipeline.module_review_reports.run_prepare_student_review_reports_job",
             side_effect=runner or self._child(),
         ):
-            return run_module_review_reports_job(module=self.module, **kwargs)
+            return run_module_review_reports_job(module=self.module, drive=self.drive, **kwargs)
 
     def test_every_class_is_built_in_one_run(self):
         self._class("2А", 2)
@@ -72,14 +79,44 @@ class ModuleReviewReportsTests(TestCase):
         self.assertEqual(job_run.result_json["summary"]["classes_done"], 2)
         self.assertEqual(job_run.result_json["summary"]["docx_created"], 6)
 
-    def test_each_class_gets_the_folder_of_its_half_of_the_school(self):
+    def test_each_class_gets_a_folder_of_its_own_under_the_module(self):
+        """DOCX 0-3 / 1 модуль/module / 2А - both levels made on the way."""
+
+        self._class("2А", 2)
+
+        self._run()
+
+        module_folder = self.drive.find_child(self.junior_root, "1 модуль/module")
+        self.assertIsNotNone(module_folder)
+        class_folder = self.drive.find_child(module_folder["id"], "2А")
+        self.assertIsNotNone(class_folder)
+        self.assertIn(class_folder["id"], self.calls[0]["drive_folder_url"])
+
+    def test_the_two_halves_of_the_school_keep_their_own_trees(self):
         self._class("2А", 2)
         self._class("7А", 7)
 
         self._run()
 
-        folders = {call["class_sheet_link_id"]: call["drive_folder_url"] for call in self.calls}
-        self.assertEqual(set(folders.values()), {JUNIOR_FOLDER, SENIOR_FOLDER})
+        junior_module = self.drive.find_child(self.junior_root, "1 модуль/module")
+        senior_module = self.drive.find_child(self.senior_root, "1 модуль/module")
+        self.assertIsNotNone(self.drive.find_child(junior_module["id"], "2А"))
+        self.assertIsNotNone(self.drive.find_child(senior_module["id"], "7А"))
+
+    def test_a_second_run_reuses_the_folders_instead_of_duplicating_them(self):
+        self._class("2А", 2)
+
+        self._run()
+        self._run()
+
+        module_folders = [
+            item for item in self.drive.list_children(self.junior_root) if item["name"] == "1 модуль/module"
+        ]
+        self.assertEqual(len(module_folders), 1)
+        class_folders = [
+            item for item in self.drive.list_children(module_folders[0]["id"]) if item["name"] == "2А"
+        ]
+        self.assertEqual(len(class_folders), 1)
 
     def test_the_module_supplies_the_number_and_the_dates(self):
         self._class("7А", 7)

@@ -22,6 +22,9 @@ from jobs.models import JobLog, JobRun
 from jobs.services import log_step
 from journal_links.models import ClassSheetLink
 from school_years.models import SchoolModule
+from google_integration.errors import GoogleIntegrationError
+from google_integration.ids import folder_url
+from school_years.report_folders import resolve_report_folder
 from school_years.report_targets import docx_target_for_class, module_number_for_reports
 
 from .student_review_reports import run_prepare_student_review_reports_job
@@ -93,6 +96,7 @@ def run_module_review_reports_job(
     job_run: JobRun | None = None,
     initiated_by=None,
     generator=None,
+    drive=None,
 ) -> JobRun:
     if job_run is None:
         job_run = JobRun.objects.create(
@@ -106,6 +110,11 @@ def run_module_review_reports_job(
         job_run.status = JobRun.Status.RUNNING
         job_run.started_at = job_run.started_at or timezone.now()
         job_run.save(update_fields=["status", "started_at"])
+
+    if drive is None:
+        from google_integration.status import build_clients
+
+        drive, _ = build_clients()
 
     links = _class_links(class_codes)
     rows: list[dict] = []
@@ -130,9 +139,31 @@ def run_module_review_reports_job(
             )
             continue
 
+        # The configured folder holds a folder per module, and that one a folder per class.
+        # Both are made here if they do not exist yet.
+        try:
+            class_folder_id = resolve_report_folder(
+                drive,
+                root_folder_url=target.docx_folder_url,
+                module=module,
+                class_code=link.class_code,
+            )
+        except GoogleIntegrationError as exc:
+            classes_skipped += 1
+            rows.append(
+                {"class_code": link.class_code, "status": "skipped", "reason": exc.user_message}
+            )
+            log_step(
+                job_run=job_run,
+                level=JobLog.Level.ERROR,
+                message="Could not open the report folder",
+                context={"class_code": link.class_code, "reason": exc.technical_message},
+            )
+            continue
+
         child = run_prepare_student_review_reports_job(
             class_sheet_link_id=link.id,
-            drive_folder_url=target.docx_folder_url,
+            drive_folder_url=folder_url(class_folder_id),
             module_number=target.module_number,
             module_dates=target.module_dates,
             initiated_by=initiated_by,

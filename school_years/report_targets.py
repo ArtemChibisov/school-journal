@@ -75,11 +75,19 @@ def docx_target_for_class(module: SchoolModule, class_code: str) -> ReportTarget
     else:
         primary = is_primary_grade(group.grade_number)
 
-    folder = module.docx_folder_0_3_url if primary else module.docx_folder_4_11_url
+    # The module's own folder when it has one, otherwise the year's. Setting the year's once
+    # is enough for a school that keeps all its reports together; a module that wants its own
+    # folder overrides it without anyone having to fill in six fields per module.
+    if primary:
+        folder = module.docx_folder_0_3_url or module.school_year.docx_root_0_3_url
+    else:
+        folder = module.docx_folder_4_11_url or module.school_year.docx_root_4_11_url
     folder = (folder or "").strip()
     if not missing and not folder:
         band = "0-3" if primary else "4-11"
-        missing = f"У модуля не указана папка DOCX {band}"
+        missing = (
+            f"Не указана папка DOCX {band}: ни у модуля, ни в настройках года"
+        )
 
     return ReportTarget(
         module=module,

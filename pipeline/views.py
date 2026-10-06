@@ -262,6 +262,18 @@ def student_review_reports(request):
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     errors = result.get("errors") if isinstance(result.get("errors"), list) else []
     uploaded_files = result.get("uploaded_files") if isinstance(result.get("uploaded_files"), list) else []
+    class_rows = result.get("classes") if isinstance(result.get("classes"), list) else []
+
+    # This screen shows both shapes of run: the module-wide one, which counts classes, and the
+    # older per-class one, which counted students. Normalising here keeps the template simple.
+    counters = {
+        "classes_total": summary.get("classes_total", 1 if summary else 0),
+        "classes_done": summary.get("classes_done", 0),
+        "classes_skipped": summary.get("classes_skipped", 0),
+        "classes_failed": summary.get("classes_failed", 0),
+        "docx_created": summary.get("docx_created", 0),
+        "uploaded_success": summary.get("uploaded_success", 0),
+    }
 
     return render(
         request,
@@ -272,6 +284,8 @@ def student_review_reports(request):
             "summary": summary,
             "errors": errors,
             "uploaded_files": uploaded_files,
+            "class_rows": class_rows,
+            "counters": counters,
             "result": result,
         },
     )
