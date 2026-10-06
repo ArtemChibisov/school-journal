@@ -47,6 +47,11 @@ body {
   color: #1d4ed8;
 }
 
+/* Раскрыт только тот раздел, в котором находишься: иначе в меню девятнадцать ссылок. */
+.nav-card .nav-section.open {
+  color: #1d4ed8;
+}
+
 .nav-card .nav-section:first-of-type {
   margin-top: 0.5rem;
 }

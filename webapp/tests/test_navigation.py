@@ -85,6 +85,39 @@ class VisibilityTests(TestCase):
         self.assertEqual(active, ["Проверка оценок"])
 
 
+class SidebarTests(TestCase):
+    """В меню видны все разделы, а страницы — только текущего.
+
+    Девятнадцать ссылок подряд читаются как одна длинная строка: ищешь нужную глазами каждый
+    раз заново. Раскрытый раздел — тот, в котором находишься.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("zavuch", password="x")
+        self.user.user_permissions.add(
+            *Permission.objects.filter(codename__in=["view_jobrun", "view_parentcontact"])
+        )
+        self.client.force_login(self.user)
+
+    def test_only_the_current_section_shows_its_pages(self):
+        response = self.client.get(reverse("section", args=["year"])).content.decode()
+
+        self.assertIn("Состав классов", response)
+        self.assertNotIn("Сохранение в PDF", response)
+
+    def test_every_section_heading_is_always_there(self):
+        response = self.client.get(reverse("section", args=["year"])).content.decode()
+
+        for title in ("Работа с модулем", "Настройки года", "Служебное"):
+            self.assertIn(title, response)
+
+    def test_a_page_inside_a_section_keeps_it_open(self):
+        response = self.client.get(reverse("pipeline:parent_mail_settings")).content.decode()
+
+        self.assertIn("Контакты родителей", response)
+        self.assertIn("Состав классов", response)
+
+
 class PageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("zavuch", password="x")

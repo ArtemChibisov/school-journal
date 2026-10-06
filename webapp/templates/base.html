@@ -43,10 +43,12 @@
             <nav class="nav nav-pills flex-column gap-1">
               <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'dashboard' %}">Главная</a>
               {% for section in nav_sections %}
-                <a class="nav-section" href="{% url 'section' section.key %}" title="{{ section.description }}">{{ section.title }}</a>
-                {% for item in section.items %}
-                  <a class="nav-link {% if item.active %}active{% endif %}" href="{{ item.href }}" title="{{ item.description }}">{{ item.title }}</a>
-                {% endfor %}
+                <a class="nav-section {% if section.active %}open{% endif %}" href="{% url 'section' section.key %}" title="{{ section.description }}">{{ section.title }}</a>
+                {% if section.active %}
+                  {% for item in section.items %}
+                    <a class="nav-link {% if item.active %}active{% endif %}" href="{{ item.href }}" title="{{ item.description }}">{{ item.title }}</a>
+                  {% endfor %}
+                {% endif %}
               {% endfor %}
             </nav>
           </div>
