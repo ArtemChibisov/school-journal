@@ -150,6 +150,13 @@ class FakeDriveClient:
         # Enough to tell one source from another in a test, which is all a fake owes anyone.
         return b"%PDF-1.4 " + self.contents.get(file_id, b"")
 
+    def download_file(self, file_id: str) -> bytes:
+        self.calls.append(("download_file", (file_id,)))
+        item = self.files.get(file_id)
+        if item is None or item["trashed"]:
+            raise _not_found(file_id)
+        return self.contents.get(file_id, b"")
+
     def upload_bytes(self, parent_id: str, name: str, data: bytes, mime_type: str) -> dict:
         self.calls.append(("upload_bytes", (parent_id, name, mime_type)))
         if parent_id not in self.files:

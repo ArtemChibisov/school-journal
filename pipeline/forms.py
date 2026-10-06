@@ -2,7 +2,7 @@ from django import forms
 
 from journal_links.forms import validate_google_sheet_url
 from journal_links.models import ClassSheetLink
-from school_years.models import SchoolModule, SchoolYear
+from school_years.models import ClassGroup, SchoolModule, SchoolYear
 from pipeline.models import (
     AICriteriaReportTarget,
     ParentContact,
@@ -123,6 +123,74 @@ class ParentLetterForm(forms.ModelForm):
         for field_name in ("subject", "body"):
             self._check(field_name)
         return cleaned
+
+
+class ParentReportsForm(forms.Form):
+    """Who the run covers, and how carefully.
+
+    Selection is by parallel or by class because the школа talks about both: «четвёртые»
+    means 4А, 4К1 and 4К2, and sometimes it really is one class. Nothing ticked means every
+    class, which is the usual run at the end of a module.
+    """
+
+    module = forms.ModelChoiceField(
+        queryset=SchoolModule.objects.none(), label="Модуль", empty_label=None
+    )
+    parallels = forms.MultipleChoiceField(
+        choices=(),
+        label="Параллели",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Отметьте параллель — войдут все её классы",
+    )
+    class_codes = forms.MultipleChoiceField(
+        choices=(),
+        label="Классы",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Ничего не отмечено — значит все классы выбранных параллелей",
+    )
+    resend = forms.BooleanField(
+        label="Отправить повторно тем, кому уже отправляли",
+        required=False,
+        help_text="Обычно письмо, которое уже ушло, второй раз не отправляется",
+    )
+    test_address = forms.EmailField(
+        label="Отправить всё на один адрес (проверка)",
+        required=False,
+        help_text="Письма уйдут сюда вместо родителей — так проверяют на настоящем классе",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        school_year = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
+        modules = (
+            SchoolModule.objects.filter(school_year=school_year).order_by("number")
+            if school_year
+            else SchoolModule.objects.none()
+        )
+        self.fields["module"].queryset = modules
+        if not self.is_bound:
+            self.fields["module"].initial = modules.first()
+
+        groups = ClassGroup.objects.filter(school_year=school_year, is_active=True).order_by(
+            "grade_number", "class_code"
+        )
+        self.fields["parallels"].choices = [
+            (str(number), f"{number} параллель")
+            for number in sorted({group.grade_number for group in groups})
+        ]
+        self.fields["class_codes"].choices = [
+            (group.class_code, group.class_code) for group in groups
+        ]
+
+        self.fields["module"].widget.attrs.setdefault("class", "form-select")
+        for name in ("parallels", "class_codes", "resend"):
+            self.fields[name].widget.attrs.setdefault("class", "form-check-input")
+        self.fields["test_address"].widget.attrs.setdefault("class", "form-control")
+
+    def clean_parallels(self):
+        return [int(value) for value in self.cleaned_data.get("parallels") or []]
 
 
 class ModulePdfReportsForm(forms.Form):

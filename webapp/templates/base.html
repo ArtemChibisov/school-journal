@@ -63,6 +63,7 @@
               {% if perms.pipeline.view_parentcontact %}
                 <a class="nav-link {% if '/parent-contacts/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_contacts_list' %}">Контакты родителей</a>
                 <a class="nav-link {% if '/parent-mail/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_mail_settings' %}">Почта для родителей</a>
+                <a class="nav-link {% if '/parent-reports/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_reports' %}">Рассылка родителям</a>
               {% endif %}
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/runs/' in request.path %}active{% endif %}" href="{% url 'job_run_list' %}">Запуски</a>

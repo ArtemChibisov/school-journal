@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block page_title %}Рассылка родителям{% endblock %}
+{% block page_heading %}Рассылка родителям{% endblock %}
+{% block extra_head %}
+  {% if job_run.status == "pending" or job_run.status == "running" %}
+    <meta http-equiv="refresh" content="10">
+  {% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'pipeline:parent_mail_settings' %}">Почта для родителей</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Рассылка</li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block page_actions %}
+  {% if job_run %}
+    <a class="btn btn-outline-secondary" href="{% url 'job_run_detail' job_run.id %}">Открыть JobRun</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if not mail.is_ready %}
+    <div class="alert alert-danger">
+      <strong>Почта не настроена — письма не уйдут.</strong>
+      Разберитесь на странице <a href="{% url 'pipeline:parent_mail_settings' %}">«Почта для родителей»</a>.
+    </div>
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <p class="text-secondary">
+        Берёт PDF из папки класса в Drive и отправляет каждому родителю отдельное письмо
+        с отчётом его ребёнка. Текст — тот, что задан на странице
+        <a href="{% url 'pipeline:parent_mail_settings' %}">«Почта для родителей»</a>.
+      </p>
+
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+
+        <div class="col-12 col-md-6 col-xl-4">
+          <label class="form-label" for="{{ form.module.id_for_label }}">{{ form.module.label }}</label>
+          {{ form.module }}
+          {{ form.module.errors }}
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">{{ form.parallels.label }}</label>
+          <div class="form-text mb-2">{{ form.parallels.help_text }}</div>
+          <div class="row row-cols-2 row-cols-md-4 row-cols-xl-6 g-1">
+            {% for choice in form.parallels %}
+              <div class="col"><div class="form-check">
+                {{ choice.tag }}
+                <label class="form-check-label small" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+              </div></div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">{{ form.class_codes.label }}</label>
+          <div class="form-text mb-2">{{ form.class_codes.help_text }}</div>
+          <div class="row row-cols-2 row-cols-md-4 row-cols-xl-6 g-1">
+            {% for choice in form.class_codes %}
+              <div class="col"><div class="form-check">
+                {{ choice.tag }}
+                <label class="form-check-label small" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+              </div></div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="{{ form.test_address.id_for_label }}">{{ form.test_address.label }}</label>
+          {{ form.test_address }}
+          <div class="form-text">{{ form.test_address.help_text }}</div>
+          {{ form.test_address.errors }}
+        </div>
+
+        <div class="col-12">
+          <div class="form-check">
+            {{ form.resend }}
+            <label class="form-check-label" for="{{ form.resend.id_for_label }}">{{ form.resend.label }}</label>
+          </div>
+          <div class="form-text">{{ form.resend.help_text }}</div>
+        </div>
+
+        <div class="col-12">
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" type="submit" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Проверить, кому уйдёт</button>
+            <button class="btn btn-danger" type="submit" name="send" value="1" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Отправить родителям</button>
+          </div>
+          <div class="form-text">
+            Проверка ничего не отправляет. Отправка уходит наружу и обратно не отзывается —
+            сначала прогоните на один адрес.
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  {% if job_run %}
+    {% if job_run.status == "pending" or job_run.status == "running" %}
+      <section class="alert alert-info" role="status">
+        {% if is_send %}Рассылка выполняется.{% else %}Проверка выполняется.{% endif %}
+        Страница обновляется автоматически.
+      </section>
+    {% endif %}
+
+    {% if test_address %}
+      <div class="alert alert-warning">
+        Это была проверка: все письма ушли на <strong>{{ test_address }}</strong>, родителям — ничего.
+      </div>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Учеников</div><div class="display-6">{{ summary.students_total }}</div></div></div></div>
+      <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Готовы к отправке</div><div class="display-6 text-success">{{ summary.ready }}</div></div></div></div>
+      <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Писем</div><div class="display-6">{{ summary.letters }}</div></div></div></div>
+      <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Нет адреса</div><div class="display-6 {% if summary.no_contact %}text-warning{% endif %}">{{ summary.no_contact }}</div></div></div></div>
+      <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Нет PDF</div><div class="display-6 {% if summary.no_pdf %}text-warning{% endif %}">{{ summary.no_pdf }}</div></div></div></div>
+      {% if is_send %}
+        <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Отправлено</div><div class="display-6">{{ summary.sent }}</div></div></div></div>
+      {% else %}
+        <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Уже отправляли</div><div class="display-6">{{ summary.already_sent }}</div></div></div></div>
+      {% endif %}
+    </div>
+
+    {% if is_send and summary.failed %}
+      <div class="alert alert-danger">Не удалось отправить писем: {{ summary.failed }}. Подробности — в журнале запуска.</div>
+    {% endif %}
+
+    {% for row in rows %}
+      <section class="card mb-3">
+        <div class="card-body">
+          <h2 class="h6 mb-2">
+            {{ row.class_code }}
+            {% if row.reason %}<span class="badge badge-soft badge-partial ms-2">{{ row.reason }}</span>{% endif %}
+          </h2>
+          {% if row.students %}
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Ученик</th>
+                    <th>Кому уйдёт</th>
+                    <th style="width: 14rem;">Что не так</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for student in row.students %}
+                    <tr>
+                      <td>{{ student.student }}</td>
+                      <td class="small">
+                        {% for email in student.emails %}
+                          <span class="d-block">
+                            {{ email }}
+                            {% if email in student.sent %}<span class="text-secondary">— уже отправляли</span>{% endif %}
+                          </span>
+                        {% empty %}
+                          <span class="text-secondary">—</span>
+                        {% endfor %}
+                      </td>
+                      <td class="small {% if student.problem %}text-warning{% endif %}">{{ student.problem }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        </div>
+      </section>
+    {% endfor %}
+  {% endif %}
+{% endblock %}

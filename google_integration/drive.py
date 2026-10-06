@@ -51,6 +51,8 @@ class DriveClient(Protocol):
 
     def export_file(self, file_id: str, mime_type: str) -> bytes: ...
 
+    def download_file(self, file_id: str) -> bytes: ...
+
     def upload_bytes(self, parent_id: str, name: str, data: bytes, mime_type: str) -> dict: ...
 
     def update_bytes(self, file_id: str, data: bytes, mime_type: str) -> dict: ...
@@ -197,6 +199,22 @@ class ApiDriveClient:
 
         with guard("drive.files.export", file_id=file_id, mime_type=mime_type):
             return self.service.files().export(fileId=file_id, mimeType=mime_type).execute()
+
+    def download_file(self, file_id: str) -> bytes:
+        """The bytes of an uploaded file - a PDF on its way to a parent, say."""
+
+        import io as _io
+
+        from googleapiclient.http import MediaIoBaseDownload
+
+        buffer = _io.BytesIO()
+        with guard("drive.files.get_media", file_id=file_id):
+            request = self.service.files().get_media(fileId=file_id, supportsAllDrives=True)
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+        return buffer.getvalue()
 
     def _media(self, data: bytes, mime_type: str):
         import io as _io

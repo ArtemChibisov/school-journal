@@ -19,6 +19,7 @@ from pipeline.forms import (
     ParentContactsImportForm,
     ModulePdfReportsForm,
     ParentLetterForm,
+    ParentReportsForm,
     StudentReviewReportsForm,
     ValidCriterionTemplateForm,
 )
@@ -251,6 +252,62 @@ def ai_criteria_report_target(request):
         request,
         "pipeline/ai_criteria_report_target.html",
         {"form": form, "target": target},
+    )
+
+
+@login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр рассылки.")
+def parent_reports(request):
+    """Check first, send second. The last step is the one that leaves the school."""
+
+    from pipeline.parent_reports import JOB_TYPE_CHECK, JOB_TYPE_SEND, enqueue
+
+    if request.method == "POST":
+        if not request.user.has_perm("jobs.run_full_pipeline"):
+            return HttpResponse("forbidden", status=403)
+        form = ParentReportsForm(request.POST)
+        if form.is_valid():
+            sending = "send" in request.POST
+            job_run = enqueue(
+                JOB_TYPE_SEND if sending else JOB_TYPE_CHECK,
+                module=form.cleaned_data["module"],
+                class_codes=form.cleaned_data.get("class_codes") or None,
+                parallels=form.cleaned_data.get("parallels") or None,
+                resend=bool(form.cleaned_data.get("resend")),
+                test_address=form.cleaned_data.get("test_address") or "",
+                initiated_by=request.user if request.user.is_authenticated else None,
+            )
+            messages.success(
+                request,
+                "Рассылка запущена." if sending else "Проверка запущена — ничего не отправлено.",
+            )
+            return redirect(f"{reverse('pipeline:parent_reports')}?run_id={job_run.id}")
+    else:
+        form = ParentReportsForm()
+
+    requested = _parse_non_empty(request.GET.get("run_id"))
+    if requested:
+        job_run = get_object_or_404(JobRun, id=requested, job_type__in=[JOB_TYPE_CHECK, JOB_TYPE_SEND])
+    else:
+        job_run = (
+            JobRun.objects.filter(job_type__in=[JOB_TYPE_CHECK, JOB_TYPE_SEND])
+            .order_by("-started_at", "-id")
+            .first()
+        )
+
+    result = job_run.result_json if job_run and isinstance(job_run.result_json, dict) else {}
+    return render(
+        request,
+        "pipeline/parent_reports.html",
+        {
+            "form": form,
+            "job_run": job_run,
+            "summary": result.get("summary") or {},
+            "rows": result.get("classes") or [],
+            "test_address": result.get("test_address") or "",
+            "is_send": bool(job_run and job_run.job_type == JOB_TYPE_SEND),
+            "mail": mail_status(),
+        },
     )
 
 
