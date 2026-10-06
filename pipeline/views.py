@@ -18,12 +18,19 @@ from pipeline.forms import (
     ParentContactForm,
     ParentContactsImportForm,
     ModulePdfReportsForm,
+    ParentLetterForm,
     StudentReviewReportsForm,
     ValidCriterionTemplateForm,
 )
 from pipeline.models import AICriteriaReportTarget, CriterionEntry, CriterionReviewEvent, ParentContact, ValidCriterionTemplate
 from pipeline.mail_status import mail_status
-from pipeline.parent_letter import letter_for
+from pipeline.parent_letter import (
+    PLACEHOLDERS,
+    letter_for,
+    sample_letter,
+    sample_module,
+    stored_template,
+)
 from pipeline.parent_contacts import import_parent_contacts_csv
 from school_years.imports.parent_contact_sync import import_parent_contacts
 from pipeline.student_review_reports import JOB_TYPE as STUDENT_REVIEW_REPORTS_JOB_TYPE, enqueue_prepare_student_review_reports_job
@@ -250,16 +257,52 @@ def ai_criteria_report_target(request):
 @login_required
 @permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр отправки.")
 def parent_mail_settings(request):
-    """What the running application knows about its mailbox, and a letter to prove it.
+    """The mailbox, the letter and an example of it - on one screen.
 
-    Reading the file on the server answers a different question than whether the settings
-    reached Django, so the application is asked instead - and a test letter settles the rest.
+    Reading the env file on the server answers a different question than whether the settings
+    reached Django, so the application is asked instead and a test letter settles the rest.
+
+    The example is rendered on every visit, from whatever the template currently is. Editing
+    the wording of a letter that four hundred families will read, without seeing the result,
+    is how a stray placeholder reaches all of them.
     """
+
+    from pipeline.models import ParentLetterTemplate
+
+    instance = ParentLetterTemplate.objects.order_by("-updated_at").first()
+    if request.method == "POST":
+        if not request.user.has_perm("jobs.run_full_pipeline"):
+            return HttpResponse("forbidden", status=403)
+        form = ParentLetterForm(request.POST, instance=instance)
+        if form.is_valid():
+            letter = form.save(commit=False)
+            letter.updated_by = request.user if request.user.is_authenticated else None
+            letter.save()
+            messages.success(request, "Текст письма сохранён.")
+            return redirect(reverse("pipeline:parent_mail_settings"))
+    else:
+        subject, body = stored_template()
+        form = ParentLetterForm(instance=instance, initial={"subject": subject, "body": body})
+
+    # The example follows what is in the form, so a draft that has not been saved is still
+    # shown the way it would go out.
+    preview_template = None
+    if form.is_bound and not form.errors:
+        preview_template = (form.cleaned_data["subject"], form.cleaned_data["body"])
+    sample_subject, sample_body = sample_letter(preview_template)
 
     return render(
         request,
         "pipeline/parent_mail_settings.html",
-        {"mail": mail_status(), "test_to": request.GET.get("to", "")},
+        {
+            "mail": mail_status(),
+            "test_to": request.GET.get("to", ""),
+            "form": form,
+            "placeholders": PLACEHOLDERS,
+            "sample_subject": sample_subject,
+            "sample_body": sample_body,
+            "sample_module": sample_module(),
+        },
     )
 
 

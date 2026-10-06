@@ -135,6 +135,36 @@ class AICriteriaReportTarget(models.Model):
         return self.name
 
 
+class ParentLetterTemplate(models.Model):
+    """The text of the letter that goes to parents, as the school wants it worded.
+
+    One row, or none: an empty table means the built-in wording is used, so the school always
+    has something sensible to start from and can never leave itself without a letter.
+
+    Stored as a template rather than a finished text because every letter differs in the
+    student, the class and the module - and typing the module into a constant is how a report
+    for the first module goes out announcing the third.
+    """
+
+    subject = models.CharField(max_length=500)
+    body = models.TextField()
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_parent_letters",
+    )
+
+    class Meta:
+        verbose_name = "Шаблон письма родителям"
+        verbose_name_plural = "Шаблоны письма родителям"
+
+    def __str__(self) -> str:
+        return self.subject
+
+
 class ParentContact(models.Model):
     parallel = models.PositiveIntegerField()
     class_code = models.CharField(max_length=16, blank=True, default="")

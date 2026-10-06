@@ -3,7 +3,12 @@ from django import forms
 from journal_links.forms import validate_google_sheet_url
 from journal_links.models import ClassSheetLink
 from school_years.models import SchoolModule, SchoolYear
-from pipeline.models import AICriteriaReportTarget, ParentContact, ValidCriterionTemplate
+from pipeline.models import (
+    AICriteriaReportTarget,
+    ParentContact,
+    ParentLetterTemplate,
+    ValidCriterionTemplate,
+)
 from pipeline.services_upload import extract_drive_folder_id, ReviewUploadError
 
 
@@ -81,6 +86,43 @@ class AICriteriaReportTargetForm(forms.ModelForm):
         self.fields["name"].widget.attrs.setdefault("class", "form-control")
         self.fields["google_sheet_url"].widget.attrs.setdefault("class", "form-control")
         self.fields["is_active"].widget.attrs.setdefault("class", "form-check-input")
+
+
+class ParentLetterForm(forms.ModelForm):
+    """The letter, as the школа wants it worded.
+
+    The check on save is the point of the form: a template is used four hundred times in one
+    run, so a placeholder nobody fills in has to be caught by the person who typed it.
+    """
+
+    class Meta:
+        model = ParentLetterTemplate
+        fields = ("subject", "body")
+        labels = {"subject": "Тема письма", "body": "Текст письма"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["subject"].widget.attrs.setdefault("class", "form-control")
+        self.fields["body"].widget = forms.Textarea(attrs={"class": "form-control", "rows": 12})
+
+    def _check(self, field_name: str) -> None:
+        from pipeline.parent_letter import PLACEHOLDERS, unknown_placeholders
+
+        value = self.cleaned_data.get(field_name) or ""
+        unknown = unknown_placeholders(value)
+        if unknown:
+            known = ", ".join(f"{{{name}}}" for name in PLACEHOLDERS)
+            listed = ", ".join(f"{{{name}}}" for name in unknown)
+            self.add_error(
+                field_name,
+                f"Нет такой подстановки: {listed}. Доступны: {known}.",
+            )
+
+    def clean(self):
+        cleaned = super().clean()
+        for field_name in ("subject", "body"):
+            self._check(field_name)
+        return cleaned
 
 
 class ModulePdfReportsForm(forms.Form):
