@@ -42,39 +42,57 @@
           <div class="card-body p-2 p-lg-3">
             <nav class="nav nav-pills flex-column gap-1">
               <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'dashboard' %}">Дашборд</a>
-              {% if perms.journal_links.view_classsheetlink %}
-                <a class="nav-link {% if '/links/' in request.path and '/links/fill-check-report/' not in request.path %}active{% endif %}" href="{% url 'journal_links:list_links' %}">Классы и таблицы</a>
+
+              {% if perms.jobs.view_jobrun or perms.pipeline.view_parentcontact %}
+                <div class="nav-section">Работа с модулем</div>
               {% endif %}
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/links/fill-check-report/' in request.path %}active{% endif %}" href="{% url 'journal_links:descriptor_criteria_fill_report' %}">Отчет заполненности</a>
+                <a class="nav-link {% if '/reminders/' in request.path %}active{% endif %}" href="{% url 'notifications:reminder_list' %}">Напоминания</a>
                 <a class="nav-link {% if '/links/grade-values/' in request.path %}active{% endif %}" href="{% url 'journal_links:grade_value_report' %}">Проверка оценок</a>
                 <a class="nav-link {% if '/student-review-reports/' in request.path %}active{% endif %}" href="{% url 'pipeline:student_review_reports' %}">Отчеты на проверку</a>
                 <a class="nav-link {% if '/module-pdf/' in request.path %}active{% endif %}" href="{% url 'pipeline:module_pdf_reports' %}">Сохранение в PDF</a>
-                <a class="nav-link {% if '/reminders/' in request.path %}active{% endif %}" href="{% url 'notifications:reminder_list' %}">Напоминания</a>
+              {% endif %}
+              {% if perms.pipeline.view_parentcontact %}
+                <a class="nav-link {% if '/parent-reports/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_reports' %}">Рассылка родителям</a>
+              {% endif %}
+
+              {% if perms.pipeline.view_criterionentry or perms.pipeline.view_validcriteriontemplate %}
+                <div class="nav-section">Критерии</div>
               {% endif %}
               {% if perms.pipeline.view_criterionentry %}
                 <a class="nav-link {% if '/criteria-table/' in request.path %}active{% endif %}" href="{% url 'pipeline:criteria_table' %}">Таблица критериев</a>
                 <a class="nav-link {% if '/ai-criteria-review/' in request.path or '/ai-criteria-report/' in request.path %}active{% endif %}" href="{% url 'pipeline:ai_criteria_review' %}">AI-вычитка критериев</a>
-                             <a class="nav-link {% if '/criteria-failures/' in request.path %}active{% endif %}" href="{% url 'pipeline:criteria_failures' %}">Проблемные критерии</a>
+                <a class="nav-link {% if '/criteria-failures/' in request.path %}active{% endif %}" href="{% url 'pipeline:criteria_failures' %}">Проблемные критерии</a>
               {% endif %}
-                {% if perms.pipeline.view_validcriteriontemplate %}
+              {% if perms.pipeline.view_validcriteriontemplate %}
                 <a class="nav-link {% if '/valid-criteria/' in request.path %}active{% endif %}" href="{% url 'pipeline:valid_criteria_list' %}">Whitelist критериев</a>
               {% endif %}
-              {% if perms.pipeline.view_parentcontact %}
-                <a class="nav-link {% if '/parent-contacts/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_contacts_list' %}">Контакты родителей</a>
-                <a class="nav-link {% if '/parent-mail/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_mail_settings' %}">Почта для родителей</a>
-                <a class="nav-link {% if '/parent-reports/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_reports' %}">Рассылка родителям</a>
-              {% endif %}
-              {% if perms.jobs.view_jobrun %}
-                <a class="nav-link {% if '/runs/' in request.path %}active{% endif %}" href="{% url 'job_run_list' %}">Запуски</a>
-                <a class="nav-link {% if '/logs/' in request.path %}active{% endif %}" href="{% url 'event_log' %}">Журнал событий</a>
+
+              {% if perms.jobs.view_jobrun or perms.journal_links.view_classsheetlink or perms.pipeline.view_parentcontact %}
+                <div class="nav-section">Настройки года</div>
               {% endif %}
               {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/school-year/' in request.path %}active{% endif %}" href="{% url 'school_years:school_year_settings' %}">Учебный год</a>
                 <a class="nav-link {% if '/roster/' in request.path %}active{% endif %}" href="{% url 'school_years:roster_import' %}">Состав классов</a>
-                <a class="nav-link {% if '/assistant-principals/' in request.path %}active{% endif %}" href="{% url 'school_years:assistant_principals' %}">Завучи</a>
                 <a class="nav-link {% if '/subject-teachers/' in request.path %}active{% endif %}" href="{% url 'school_years:subject_teachers' %}">Предметы и преподаватели</a>
+                <a class="nav-link {% if '/assistant-principals/' in request.path %}active{% endif %}" href="{% url 'school_years:assistant_principals' %}">Завучи</a>
+              {% endif %}
+              {% if perms.journal_links.view_classsheetlink %}
+                <a class="nav-link {% if '/links/' in request.path and '/links/fill-check-report/' not in request.path and '/links/grade-values/' not in request.path %}active{% endif %}" href="{% url 'journal_links:list_links' %}">Классы и таблицы</a>
+              {% endif %}
+              {% if perms.jobs.view_jobrun %}
                 <a class="nav-link {% if '/modules/' in request.path %}active{% endif %}" href="{% url 'school_years:module_registers' %}">Журналы модуля</a>
+              {% endif %}
+              {% if perms.pipeline.view_parentcontact %}
+                <a class="nav-link {% if '/parent-contacts/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_contacts_list' %}">Контакты родителей</a>
+                <a class="nav-link {% if '/parent-mail/' in request.path %}active{% endif %}" href="{% url 'pipeline:parent_mail_settings' %}">Почта для родителей</a>
+              {% endif %}
+
+              <div class="nav-section">Служебное</div>
+              {% if perms.jobs.view_jobrun %}
+                <a class="nav-link {% if '/runs/' in request.path %}active{% endif %}" href="{% url 'job_run_list' %}">Запуски</a>
+                <a class="nav-link {% if '/logs/' in request.path %}active{% endif %}" href="{% url 'event_log' %}">Журнал событий</a>
                 <a class="nav-link {% if '/google/' in request.path %}active{% endif %}" href="{% url 'google_integration:google_status' %}">Google-подключение</a>
               {% endif %}
               <a class="nav-link {% if '/healthz' in request.path or '/readyz' in request.path %}active{% endif %}" href="{% url 'readyz' %}">Мониторинг</a>

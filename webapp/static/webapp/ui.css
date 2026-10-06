@@ -30,6 +30,21 @@ body {
   color: #1d4ed8;
 }
 
+/* Группы в боковом меню: что делают каждый модуль, что настраивают раз в год. */
+.nav-card .nav-section {
+  color: #667085;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.8rem 0.15rem;
+  margin-top: 0.75rem;
+}
+
+.nav-card .nav-section:first-of-type {
+  margin-top: 0.5rem;
+}
+
 .card {
   border: 1px solid #eaecf0;
   border-radius: 1rem;
