@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block page_title %}Завучи{% endblock %}
+{% block page_heading %}Завучи{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'school_years:roster_import' %}">Состав классов</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Завучи</li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block content %}
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Кто за какие параллели</h2>
+      <p class="text-secondary small">
+        Имя завуча печатается на последней странице отчёта. Параллель, за которой никого нет,
+        даёт пустую строку в отчётах всех её классов.
+      </p>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width: 10rem;">Параллель</th>
+              <th>Завуч</th>
+              <th>Классы</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in coverage %}
+              <tr>
+                <td>{{ row.parallel }}</td>
+                <td>
+                  {% if row.principal %}
+                    {{ row.principal }}
+                  {% else %}
+                    <span class="text-danger">не назначен</span>
+                  {% endif %}
+                </td>
+                <td class="small text-secondary">{{ row.classes|join:", " }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-secondary">Состав классов не загружен — параллели неизвестны.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">{% if editing %}Изменить завуча{% else %}Добавить завуча{% endif %}</h2>
+
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        {% if editing %}<input type="hidden" name="pk" value="{{ editing.pk }}">{% endif %}
+
+        <div class="col-12 col-xl-6">
+          <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+          {{ form.name }}
+          <div class="form-text">{{ form.name.help_text }}</div>
+          {% for error in form.name.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">{{ form.parallels.label }}</label>
+          <div class="form-text mb-2">{{ form.parallels.help_text }}</div>
+          <div class="d-flex flex-wrap gap-3">
+            {% for choice in form.parallels %}
+              <div class="form-check">
+                {{ choice.tag }}
+                <label class="form-check-label" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="form-check">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary" {% if not can_edit %}disabled{% endif %}>Сохранить</button>
+          {% if editing %}
+            <a class="btn btn-outline-secondary ms-2" href="{% url 'school_years:assistant_principals' %}">Отменить</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Завуч</th>
+              <th style="width: 14rem;">Параллели</th>
+              <th style="width: 8rem;">Статус</th>
+              <th style="width: 8rem;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for principal in principals %}
+              <tr>
+                <td>{{ principal.name }}</td>
+                <td>{{ principal.parallels_display }}</td>
+                <td>
+                  {% if principal.is_active %}
+                    <span class="badge badge-soft badge-success">активен</span>
+                  {% else %}
+                    <span class="badge badge-soft badge-partial">выключен</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if can_edit %}
+                    <a class="btn btn-outline-secondary btn-sm" href="?edit={{ principal.pk }}">Изменить</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-secondary">Пока никого.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

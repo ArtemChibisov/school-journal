@@ -182,6 +182,7 @@ class FakeDocxGenerator:
         module_number,
         module_dates,
         school_year,
+        assistant_principal,
         school_level,
         include_tutor,
     ):
@@ -195,6 +196,7 @@ class FakeDocxGenerator:
                 "module_number": module_number,
                 "module_dates": module_dates,
                 "school_year": school_year,
+                "assistant_principal": assistant_principal,
                 "school_level": school_level,
                 "include_tutor": include_tutor,
             }
@@ -247,6 +249,7 @@ class StudentReviewReportsJobTests(TestCase):
                     module_number=2,
                     module_dates="01.09 – 25.10.2026",
                     school_year="2026-2027",
+                    assistant_principal="Александр Белов | Alexander Belov",
                     generator=FakeDocxGenerator(capture),
                 )
                 upload_kwargs = mock_upload.call_args.kwargs
@@ -274,6 +277,7 @@ class StudentReviewReportsJobTests(TestCase):
         self.assertEqual(capture["module_number"], 2)
         self.assertEqual(capture["module_dates"], "01.09 – 25.10.2026")
         self.assertEqual(capture["school_year"], "2026-2027")
+        self.assertEqual(capture["assistant_principal"], "Александр Белов | Alexander Belov")
         self.assertEqual(upload_kwargs["folder_id"], "folder123456789")
         self.assertEqual(upload_kwargs["duplicate_strategy"], "update")
         self.assertEqual(upload_kwargs["docx_files"][0]["name"], "4A John Doe.docx")

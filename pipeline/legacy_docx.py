@@ -50,6 +50,7 @@ class LegacyDocxGenerator:
         module_number: int | None = None,
         module_dates: str = "",
         school_year: str = "",
+        assistant_principal: str | None = None,
         school_level: str = "secondary",
         include_tutor: bool = True,
     ) -> list[str]:
@@ -89,6 +90,7 @@ class LegacyDocxGenerator:
                 module_number=module_number,
                 module_dates=module_dates,
                 school_year=school_year,
+                assistant_principal=assistant_principal,
                 include_tutor=include_tutor,
             )
             subject_tables = generate_page.generate_subject(students, str(temp_dir))

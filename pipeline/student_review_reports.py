@@ -57,6 +57,7 @@ def _params(
     module_number: int,
     module_dates: str,
     school_year: str,
+    assistant_principal: str,
 ) -> dict[str, Any]:
     return {
         "class_code": link.class_code,
@@ -66,6 +67,7 @@ def _params(
         "module_number": module_number,
         "module_dates": module_dates,
         "school_year": school_year,
+        "assistant_principal": assistant_principal,
         "output_format": "docx",
         "trigger": "manual",
     }
@@ -78,6 +80,7 @@ def enqueue_prepare_student_review_reports_job(
     module_number: int,
     module_dates: str,
     school_year: str = "",
+    assistant_principal: str = "",
     initiated_by=None,
 ) -> JobRun:
     link = ClassSheetLink.objects.get(id=class_sheet_link_id, is_active=True)
@@ -89,6 +92,7 @@ def enqueue_prepare_student_review_reports_job(
         module_number=module_number,
         module_dates=module_dates,
         school_year=school_year,
+        assistant_principal=assistant_principal,
     )
     job_run = JobRun.objects.create(
         job_type=JOB_TYPE,
@@ -118,6 +122,7 @@ def _run_prepare_student_review_reports_thread(job_run_id: str) -> None:
             module_number=int(params["module_number"]),
             module_dates=str(params.get("module_dates") or ""),
             school_year=str(params.get("school_year") or ""),
+            assistant_principal=str(params.get("assistant_principal") or ""),
             initiated_by=job_run.initiated_by,
             job_run=job_run,
         )
@@ -142,6 +147,7 @@ def run_prepare_student_review_reports_job(
     module_number: int,
     module_dates: str,
     school_year: str = "",
+    assistant_principal: str = "",
     initiated_by=None,
     job_run: JobRun | None = None,
     generator: LegacyDocxGenerator | None = None,
@@ -155,6 +161,7 @@ def run_prepare_student_review_reports_job(
         module_number=module_number,
         module_dates=module_dates,
         school_year=school_year,
+        assistant_principal=assistant_principal,
     )
 
     if job_run is None:
@@ -213,6 +220,7 @@ def run_prepare_student_review_reports_job(
             module_number=module_number,
             module_dates=module_dates,
             school_year=school_year,
+            assistant_principal=assistant_principal,
             school_level=school_level,
             include_tutor=include_tutor,
         )
@@ -262,6 +270,7 @@ def run_prepare_student_review_reports_job(
             "module_number": module_number,
             "module_dates": module_dates,
             "school_year": school_year,
+            "assistant_principal": assistant_principal,
             "school_level": school_level,
             "include_tutor": include_tutor,
             "files": docx_entries,

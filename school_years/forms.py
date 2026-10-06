@@ -12,7 +12,7 @@ from django import forms
 from google_integration.errors import GoogleIntegrationError
 from google_integration.ids import extract_folder_id, extract_spreadsheet_id
 
-from .models import SchoolModule, SchoolYear
+from .models import AssistantPrincipal, SchoolModule, SchoolYear
 
 # Which fields carry a Google link, and what kind. Used both for validation and for the
 # completeness check, so the two can never drift apart.
@@ -218,3 +218,36 @@ class SchoolModuleForm(forms.ModelForm):
                 self.add_error("number", "Такой модуль в этом учебном году уже есть.")
 
         return cleaned
+
+
+class AssistantPrincipalForm(forms.ModelForm):
+    """One завуч and the parallels they sign for.
+
+    Parallels rather than classes, because that is how the school assigns the job and because
+    a class code is text that has been spelled four ways in four tables.
+    """
+
+    parallels = forms.MultipleChoiceField(
+        choices=[(str(number), str(number)) for number in range(0, 12)],
+        label="Параллели",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="За какие параллели он подписывает отчёты",
+    )
+
+    class Meta:
+        model = AssistantPrincipal
+        fields = ("name", "parallels", "is_active")
+        labels = {"name": "Имя", "is_active": "Активен"}
+        help_texts = {"name": "Как в отчёте: «Александр Белов | Alexander Belov»"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["name"].widget.attrs.setdefault("class", "form-control")
+        self.fields["is_active"].widget.attrs.setdefault("class", "form-check-input")
+        self.fields["parallels"].widget.attrs.setdefault("class", "form-check-input")
+        if self.instance and self.instance.pk:
+            self.initial["parallels"] = [str(number) for number in self.instance.parallel_numbers]
+
+    def clean_parallels(self):
+        return sorted({int(value) for value in self.cleaned_data.get("parallels") or []})

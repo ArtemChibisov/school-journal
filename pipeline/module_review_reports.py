@@ -36,6 +36,7 @@ from school_years.models import SchoolModule
 from google_integration.drive import MIME_FOLDER, ensure_shared
 from google_integration.errors import GoogleIntegrationError
 from google_integration.ids import folder_url
+from school_years.assistant_principals import principal_name_for_class
 from school_years.report_folders import resolve_report_folder
 from school_years.report_targets import docx_target_for_class, module_number_for_reports
 
@@ -302,6 +303,7 @@ def run_module_review_reports_job(
             module_number=target.module_number,
             module_dates=target.module_dates,
             school_year=target.school_year,
+            assistant_principal=principal_name_for_class(module.school_year, link.class_code),
             initiated_by=initiated_by,
             generator=generator,
         )

@@ -21,6 +21,7 @@ from journal_links.models import DescriptorCriteriaReportTarget
 
 from .forms import (
     ACCESS_FIELDS,
+    AssistantPrincipalForm,
     FOLDER_FIELDS,
     SPREADSHEET_FIELDS,
     SchoolModuleForm,
@@ -28,6 +29,7 @@ from .forms import (
     filled_link_count,
     missing_for_generation,
 )
+from .assistant_principals import coverage
 from .imports.registers import JOB_TYPE as SCAN_JOB_TYPE, run_register_scan
 from .imports.roster_sync import JOB_TYPE as ROSTER_JOB_TYPE, import_class_roster
 from .imports.subject_teacher_sync import (
@@ -35,6 +37,7 @@ from .imports.subject_teacher_sync import (
     import_subject_teachers,
 )
 from .models import (
+    AssistantPrincipal,
     ClassGroup,
     ClassRegister,
     SchoolModule,
@@ -90,6 +93,46 @@ def _sync_monitoring_target(school_year) -> None:
     if target.google_sheet_url != url:
         target.google_sheet_url = url
         target.save()
+
+@login_required
+@permission_required_403(VIEW_PERMISSION)
+def assistant_principals(request):
+    """Who signs the reports, and whether every parallel has someone.
+
+    The list is short - three people - so it is edited in place rather than through a page per
+    person. What is worth seeing at a glance is the other table: every parallel the school has
+    and who covers it, because a parallel nobody covers prints an empty line in every report
+    of every class in it, and nothing else would ever say so.
+    """
+
+    school_year = _selected_school_year(request)
+    editing = AssistantPrincipal.objects.filter(pk=request.GET.get("edit")).first()
+
+    if request.method == "POST":
+        if not request.user.has_perm(RUN_PERMISSION):
+            return HttpResponseForbidden("forbidden")
+        instance = AssistantPrincipal.objects.filter(pk=request.POST.get("pk")).first()
+        form = AssistantPrincipalForm(request.POST, instance=instance)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Сохранено.")
+            return redirect(reverse("school_years:assistant_principals"))
+    else:
+        form = AssistantPrincipalForm(instance=editing)
+
+    return render(
+        request,
+        "school_years/assistant_principals.html",
+        {
+            "form": form,
+            "editing": editing,
+            "principals": AssistantPrincipal.objects.all(),
+            "coverage": coverage(school_year) if school_year else [],
+            "school_year": school_year,
+            "can_edit": request.user.has_perm(RUN_PERMISSION),
+        },
+    )
+
 
 @login_required
 @permission_required_403(VIEW_PERMISSION)

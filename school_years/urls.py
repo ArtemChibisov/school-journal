@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    assistant_principals,
     module_registers,
     roster_import,
     run_register_scan_view,
@@ -14,6 +15,7 @@ app_name = "school_years"
 
 urlpatterns = [
     path("school-year/", school_year_settings, name="school_year_settings"),
+    path("assistant-principals/", assistant_principals, name="assistant_principals"),
     path("roster/", roster_import, name="roster_import"),
     path("roster/run/", run_roster_import, name="run_roster_import"),
     path("subject-teachers/", subject_teachers, name="subject_teachers"),

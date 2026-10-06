@@ -92,6 +92,49 @@ class SchoolModule(models.Model):
         return f"{self.school_year} / {label}"
 
 
+class AssistantPrincipal(models.Model):
+    """Who signs the reports of a given parallel.
+
+    The name used to be a table inside the legacy helper, keyed by last year's class codes.
+    Nineteen of this year's thirty-two classes matched nothing in it, so their reports printed
+    «Завуч | Assistant Principal:» and then stopped - and nobody could fix it without a deploy.
+
+    A завуч covers parallels rather than classes, which is how the school assigns them: one
+    for 0-3, one for 4-6, one for 7-11. Stored as the list of parallels so an unusual split -
+    one parallel moved to another завуч - needs no new concept.
+    """
+
+    name = models.CharField(max_length=255)
+    parallels = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Завуч"
+        verbose_name_plural = "Завучи"
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def parallel_numbers(self) -> list[int]:
+        """The parallels, as numbers, ignoring anything that is not one."""
+
+        numbers = []
+        for value in self.parallels or []:
+            try:
+                numbers.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        return sorted(set(numbers))
+
+    @property
+    def parallels_display(self) -> str:
+        numbers = self.parallel_numbers
+        return ", ".join(str(number) for number in numbers) if numbers else "—"
+
+
 class ClassGroup(models.Model):
     class GradeBand(models.TextChoices):
         PRIMARY_0_3 = "primary_0_3", "Primary 0-3"

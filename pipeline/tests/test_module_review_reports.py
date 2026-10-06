@@ -133,6 +133,29 @@ class ModuleReviewReportsTests(TestCase):
         ]
         self.assertEqual(len(class_folders), 1)
 
+    def test_the_assistant_principal_comes_from_the_settings(self):
+        """Not from a table of last year's class codes, which missed most of this year's."""
+
+        from school_years.models import AssistantPrincipal
+
+        AssistantPrincipal.objects.all().delete()
+        AssistantPrincipal.objects.create(name="Ольга Ткачук | Olga Tkachuk", parallels=[7])
+        self._class("7А", 7)
+
+        self._run()
+
+        self.assertEqual(self.calls[0]["assistant_principal"], "Ольга Ткачук | Olga Tkachuk")
+
+    def test_a_parallel_nobody_signs_for_sends_an_empty_name(self):
+        from school_years.models import AssistantPrincipal
+
+        AssistantPrincipal.objects.all().delete()
+        self._class("7А", 7)
+
+        self._run()
+
+        self.assertEqual(self.calls[0]["assistant_principal"], "")
+
     def test_the_module_supplies_the_number_the_dates_and_the_year(self):
         """Everything the first page prints - none of it typed into a form."""
 

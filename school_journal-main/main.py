@@ -253,6 +253,7 @@ def fill_header(
     module_number=None,
     module_dates="",
     school_year="",
+    assistant_principal=None,
     include_tutor=True,
 ) -> list:
     """
@@ -266,7 +267,13 @@ def fill_header(
 
     for student in report_data:
         class_code = student.level or ""
-        ap = get_assistant_principal_for_class(class_code) or ""
+        # The name comes from the settings now. The old table is keyed by class codes from a
+        # year that has ended and matched nineteen of this year's thirty-two classes, so it is
+        # only consulted when the caller says nothing at all.
+        if assistant_principal is None:
+            ap = get_assistant_principal_for_class(class_code) or ""
+        else:
+            ap = assistant_principal or ""
 
         tutor_name = ""
         tutor_text_final = ""
