@@ -55,7 +55,7 @@ class CheckSchoolYearAccessTests(PreflightTestCase):
 
         item = self._items_by_field(result)["monitoring_sheet_url"]
         self.assertEqual(item["status"], STATUS_NOT_CONFIGURED)
-        self.assertEqual(result["not_configured"], 11)
+        self.assertEqual(result["not_configured"], 12)
 
     def test_counts_add_up_to_every_check(self):
         result = check_school_year_access(self.school_year, drive=self.drive, sheets=self.sheets)

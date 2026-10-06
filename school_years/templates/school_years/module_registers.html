@@ -4,6 +4,13 @@
 
 {% block page_actions %}
   {% if can_edit and module %}
+    <form method="post" action="{% url 'school_years:run_register_generation' %}"
+          onsubmit="return confirm('Завести журналы модуля «{{ module }}» для всех классов? Уже созданные не изменятся.')">
+      {% csrf_token %}
+      <input type="hidden" name="school_year" value="{{ school_year.pk }}">
+      <input type="hidden" name="module" value="{{ module.pk }}">
+      <button class="btn btn-primary" type="submit">Завести журналы</button>
+    </form>
     <form method="post" action="{% url 'school_years:run_register_scan' %}">
       {% csrf_token %}
       <input type="hidden" name="school_year" value="{{ school_year.pk }}">
@@ -15,7 +22,7 @@
       {% csrf_token %}
       <input type="hidden" name="school_year" value="{{ school_year.pk }}">
       <input type="hidden" name="module" value="{{ module.pk }}">
-      <button class="btn btn-primary" type="submit">Привязать к классам</button>
+      <button class="btn btn-outline-primary" type="submit">Привязать к классам</button>
     </form>
   {% endif %}
   {% if can_edit and school_year %}
@@ -188,7 +195,11 @@
     <div class="p-3 pb-0"><h2 class="h5 mb-0">Привязанные журналы</h2></div>
 
     {% if not registers %}
-      <p class="p-3 mb-0 text-secondary">Пока ничего не привязано. Нажмите «Найти журналы», потом «Привязать к классам».</p>
+      <p class="p-3 mb-0 text-secondary">
+        Пока ничего не привязано. Нажмите <strong>«Завести журналы»</strong> — система создаст их
+        из бланка и привяжет сама. «Найти журналы» и «Привязать к классам» нужны, только если
+        журналы делали вручную.
+      </p>
     {% else %}
       <div class="table-responsive mt-3">
         <table class="table table-hover align-middle mb-0">

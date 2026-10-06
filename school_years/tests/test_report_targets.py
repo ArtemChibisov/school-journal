@@ -158,3 +158,35 @@ class DocxTargetTests(TestCase):
         self._class("7А", 7, is_active=False)
 
         self.assertFalse(docx_target_for_class(self.module, "7А").is_ready)
+
+
+class RegisterTemplateTests(TestCase):
+    """Бланк журнала свой у каждой половины школы."""
+
+    def setUp(self):
+        self.year = SchoolYear.objects.create(
+            name="26/27",
+            is_active=True,
+            class_register_template_0_3_url="https://docs.google.com/spreadsheets/d/junior/edit",
+            class_register_template_4_11_url="https://docs.google.com/spreadsheets/d/senior/edit",
+        )
+
+    def test_the_primary_school_gets_its_own(self):
+        from school_years.report_targets import register_template_url
+
+        self.assertIn("junior", register_template_url(self.year, primary=True))
+
+    def test_everyone_else_gets_the_other(self):
+        from school_years.report_targets import register_template_url
+
+        self.assertIn("senior", register_template_url(self.year, primary=False))
+
+    def test_an_unset_template_comes_back_empty_rather_than_as_the_other_one(self):
+        """Чужой бланк хуже, чем отказ: шкала в нём другая."""
+
+        from school_years.report_targets import register_template_url
+
+        self.year.class_register_template_0_3_url = ""
+        self.year.save()
+
+        self.assertEqual(register_template_url(self.year, primary=True), "")

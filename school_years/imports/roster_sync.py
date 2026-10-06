@@ -22,6 +22,7 @@ from jobs.models import JobRun
 
 from ..models import ClassGroup
 from .roster import RosterParseResult, read_roster_for_school_year
+from ..models import Student
 from .text import comparison_key
 
 JOB_TYPE = "class_roster_import"
@@ -34,6 +35,9 @@ class SyncSummary:
     unchanged: int = 0
     deactivated: int = 0
     skipped_with_errors: int = 0
+    students_created: int = 0
+    students_updated: int = 0
+    students_deactivated: int = 0
 
 
 def _existing_by_key(school_year) -> dict[str, ClassGroup]:
@@ -104,7 +108,75 @@ def sync_class_groups(school_year, result: RosterParseResult) -> SyncSummary:
         group.save()
         summary.deactivated += 1
 
+    _sync_students(school_year, result, summary)
     return summary
+
+
+def _sync_students(school_year, result: RosterParseResult, summary: SyncSummary) -> None:
+    """Сохранить учеников класса.
+
+    Лист `students` читался и проверялся с самого начала, но никуда не записывался — система
+    знала, что учеников 367, и не знала ни одного по имени. Создавать журнал класса было не
+    из чего.
+
+    Трогаются только классы, пришедшие из таблицы без ошибок: класс с ошибкой остаётся таким,
+    каким был, вместе со своими учениками — половина класса хуже, чем вчерашний список.
+    """
+
+    groups = {
+        comparison_key(group.class_code): group
+        for group in ClassGroup.objects.filter(school_year=school_year)
+    }
+
+    for item in result.classes:
+        group = groups.get(comparison_key(item.class_code))
+        if group is None:
+            continue
+
+        existing = {
+            comparison_key(student.student_name): student
+            for student in Student.objects.filter(class_group=group)
+        }
+        seen: set[str] = set()
+
+        for parsed in item.students:
+            key = comparison_key(parsed.student_name)
+            seen.add(key)
+            student = existing.get(key)
+            if student is None:
+                Student.objects.create(
+                    school_year=school_year,
+                    class_group=group,
+                    student_name=parsed.student_name,
+                    student_order=parsed.student_order,
+                    notes=parsed.notes,
+                    is_active=True,
+                )
+                summary.students_created += 1
+                continue
+
+            changed = (
+                student.student_name != parsed.student_name
+                or student.student_order != parsed.student_order
+                or student.notes != parsed.notes
+                or not student.is_active
+            )
+            if not changed:
+                continue
+            student.student_name = parsed.student_name
+            student.student_order = parsed.student_order
+            student.notes = parsed.notes
+            student.is_active = True
+            student.save()
+            summary.students_updated += 1
+
+        # Ушедшие отключаются, а не удаляются: отчёт за прошлый модуль всё ещё о них.
+        for key, student in existing.items():
+            if key in seen or not student.is_active:
+                continue
+            student.is_active = False
+            student.save(update_fields=["is_active", "updated_at"])
+            summary.students_deactivated += 1
 
 
 def _job_status(result: RosterParseResult, summary: SyncSummary) -> str:

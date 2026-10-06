@@ -31,6 +31,7 @@ from .forms import (
 )
 from .assistant_principals import coverage
 from .imports.registers import JOB_TYPE as SCAN_JOB_TYPE, run_register_scan
+from .register_generation import run_register_generation
 from .imports.roster_sync import JOB_TYPE as ROSTER_JOB_TYPE, import_class_roster
 from .imports.subject_teacher_sync import (
     JOB_TYPE as SUBJECT_JOB_TYPE,
@@ -429,6 +430,47 @@ def module_registers(request):
             ),
         },
     )
+
+
+@login_required
+@permission_required_403(RUN_PERMISSION)
+@require_POST
+def run_register_generation_view(request):
+    """Завести журналы модуля из бланка — одной кнопкой.
+
+    До сих пор это была ручная работа: создать папку модуля, вставить две ссылки, скопировать
+    бланк по разу на класс, в каждой копии размножить лист по предметам и вписать учителя.
+    """
+
+    school_year = _selected_school_year(request)
+    module = _selected_module(request, school_year)
+    redirect_url = reverse("school_years:module_registers")
+
+    if module is None:
+        messages.error(request, "Сначала сохраните модуль.")
+        return redirect(redirect_url)
+
+    target = f"{redirect_url}?school_year={school_year.pk}&module={module.pk}"
+
+    try:
+        drive, sheets = build_clients()
+    except GoogleIntegrationError as exc:
+        messages.error(request, exc.user_message)
+        return redirect(target)
+
+    job_run = run_register_generation(
+        module, drive=drive, sheets=sheets, initiated_by=request.user
+    )
+    summary = (job_run.result_json or {}).get("summary", {})
+    message = (
+        f"Журналы модуля: создано {summary.get('created', 0)}, "
+        f"пропущено {summary.get('skipped', 0)}, с ошибкой {summary.get('failed', 0)}"
+    )
+    if summary.get("failed") or summary.get("skipped"):
+        messages.warning(request, message + ". Подробности ниже.")
+    else:
+        messages.success(request, message + ".")
+    return redirect(f"{target}&run_id={job_run.id}")
 
 
 @login_required

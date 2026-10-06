@@ -442,3 +442,61 @@ class ImportClassRosterJobTests(TestCase):
         issues = job_run.result_json["issues"]
         self.assertTrue(any(item["code"] == "MISSING_TUTOR" for item in issues))
         self.assertTrue(any("не указан тьютор" in item["message"] for item in issues))
+
+
+
+class StudentSyncTests(TestCase):
+    """Лист `students` читался и проверялся всегда — и никуда не записывался.
+
+    Система знала, что учеников 367, и не знала ни одного по имени.
+    """
+
+    def _import(self, students):
+        year = SchoolYear.objects.create(
+            name="26/27", is_active=True, class_roster_sheet_url=spreadsheet_url(BOOK_ID)
+        )
+        sheets = workbook(classes=[["2Б", "2", "Тьютор", "yes"]], students=students)
+        return import_class_roster(year, sheets=sheets)
+
+    def test_students_are_stored_in_their_order(self):
+        from school_years.models import Student
+
+        self._import([["2Б", "2", "Пётр Быков", "yes", ""], ["2Б", "1", "Мария Иванова", "yes", ""]])
+
+        names = list(
+            Student.objects.filter(is_active=True)
+            .order_by("student_order")
+            .values_list("student_name", flat=True)
+        )
+        self.assertEqual(names, ["Мария Иванова", "Пётр Быков"])
+
+    def test_a_student_who_left_is_switched_off_not_deleted(self):
+        from school_years.models import Student
+
+        self._import([["2Б", "1", "Мария Иванова", "yes", ""]])
+        year = SchoolYear.objects.first()
+        import_class_roster(
+            year,
+            sheets=workbook(
+                classes=[["2Б", "2", "Тьютор", "yes"]],
+                students=[["2Б", "1", "Пётр Быков", "yes", ""]],
+            ),
+        )
+
+        self.assertFalse(Student.objects.get(student_name="Мария Иванова").is_active)
+        self.assertTrue(Student.objects.get(student_name="Пётр Быков").is_active)
+
+    def test_running_again_does_not_double_anybody(self):
+        from school_years.models import Student
+
+        self._import([["2Б", "1", "Мария Иванова", "yes", ""]])
+        year = SchoolYear.objects.first()
+        import_class_roster(
+            year,
+            sheets=workbook(
+                classes=[["2Б", "2", "Тьютор", "yes"]],
+                students=[["2Б", "1", "Мария Иванова", "yes", ""]],
+            ),
+        )
+
+        self.assertEqual(Student.objects.count(), 1)

@@ -23,7 +23,8 @@ class SchoolYearModelTests(TestCase):
 
         self.assertEqual(str(school_year), "2026/2027")
         self.assertTrue(school_year.is_active)
-        self.assertEqual(school_year.class_register_template_url, "")
+        self.assertEqual(school_year.class_register_template_0_3_url, "")
+        self.assertEqual(school_year.class_register_template_4_11_url, "")
         self.assertEqual(school_year.parent_contacts_sheet_url, "")
 
 

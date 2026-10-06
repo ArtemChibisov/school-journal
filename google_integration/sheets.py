@@ -31,6 +31,8 @@ class SheetsClient(Protocol):
 
     def delete_sheet(self, spreadsheet_id: str, title: str) -> None: ...
 
+    def duplicate_sheet(self, spreadsheet_id: str, source_title: str, new_title: str) -> None: ...
+
 
 class ApiSheetsClient:
     """Sheets v4 client."""
@@ -120,6 +122,27 @@ class ApiSheetsClient:
             spreadsheet_id,
             [{"addSheet": {"properties": {"title": title}}}],
             operation="sheets.batchUpdate.addSheet",
+        )
+
+    def duplicate_sheet(self, spreadsheet_id: str, source_title: str, new_title: str) -> None:
+        """Копия листа вместе с форматом и проверкой данных.
+
+        Не `addSheet`: он создаёт пустой лист. В бланке журнала выпадающие списки — это и есть
+        бланк, учитель выбирает уровень из них, а не печатает его руками.
+        """
+
+        sheet_id = self._sheet_id(spreadsheet_id, source_title)
+        self._batch_update(
+            spreadsheet_id,
+            [
+                {
+                    "duplicateSheet": {
+                        "sourceSheetId": sheet_id,
+                        "newSheetName": new_title,
+                    }
+                }
+            ],
+            operation="sheets.batchUpdate.duplicateSheet",
         )
 
     def delete_sheet(self, spreadsheet_id: str, title: str) -> None:

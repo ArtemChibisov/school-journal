@@ -18,6 +18,7 @@ JOB_TYPE_LABELS = {
     "module_pdf_reports": "Отчёты модуля в PDF",
     "module_pdf_scan": "Проверка готовности к PDF",
     "parent_contact_import": "Импорт контактов родителей",
+    "register_generation": "Создание журналов модуля",
     "parent_reports_check": "Проверка рассылки родителям",
     "parent_reports_send": "Рассылка отчётов родителям",
     "descriptor_criteria_fill_check": "Проверка заполненности журналов",

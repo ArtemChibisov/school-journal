@@ -17,7 +17,8 @@ from .models import AssistantPrincipal, SchoolModule, SchoolYear
 # Which fields carry a Google link, and what kind. Used both for validation and for the
 # completeness check, so the two can never drift apart.
 SPREADSHEET_FIELDS = (
-    "class_register_template_url",
+    "class_register_template_0_3_url",
+    "class_register_template_4_11_url",
     "class_roster_sheet_url",
     "subject_teacher_sheet_url",
     "telegram_mapping_sheet_url",
@@ -45,7 +46,8 @@ ACCESS_FIELDS = ("reports_access_group_email",)
 REQUIRED_FOR_GENERATION = (
     "class_roster_sheet_url",
     "subject_teacher_sheet_url",
-    "class_register_template_url",
+    "class_register_template_0_3_url",
+    "class_register_template_4_11_url",
     "register_root_0_3_url",
     "register_root_4_11_url",
 )
@@ -56,7 +58,8 @@ FIELD_LABELS = {
     "telegram_mapping_sheet_url": "Таблица Telegram-расшифровки",
     "parent_contacts_sheet_url": "Таблица контактов родителей",
     "monitoring_sheet_url": "Таблица мониторинга заполняемости",
-    "class_register_template_url": "Шаблон class register",
+    "class_register_template_0_3_url": "Шаблон журнала 0-3",
+    "class_register_template_4_11_url": "Шаблон журнала 4-11",
     "register_root_0_3_url": "Корневая папка журналов 0-3",
     "register_root_4_11_url": "Корневая папка журналов 4-11",
     "docx_root_0_3_url": "Папка DOCX 0-3",

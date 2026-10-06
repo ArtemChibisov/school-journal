@@ -97,6 +97,17 @@ def _folder_for(module: SchoolModule, kind: str, *, primary: bool) -> str:
     return (own or fallback or "").strip()
 
 
+def register_template_url(school_year: SchoolYear, *, primary: bool) -> str:
+    """Бланк журнала для этой половины школы.
+
+    0-3 и 4-11 оценивают по разным шкалам, поэтому и бланк разный. Выбирается по параллели
+    класса из состава классов — по коду класса такое не определить, он просто текст.
+    """
+
+    field = "class_register_template_0_3_url" if primary else "class_register_template_4_11_url"
+    return (getattr(school_year, field, "") or "").strip()
+
+
 def docx_target_for_class(module: SchoolModule, class_code: str) -> ReportTarget:
     """Everything a run needs for one class, taken from the module it belongs to.
 

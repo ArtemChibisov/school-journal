@@ -41,7 +41,8 @@ class SchoolYearAdminConfigTests(TestCase):
         self.assertIn("unsent_reports_folder_url", google_folder_fields)
 
         input_fields = _flatten_fields(fieldsets["Input sheets/templates"]["fields"])
-        self.assertIn("class_register_template_url", input_fields)
+        self.assertIn("class_register_template_0_3_url", input_fields)
+        self.assertIn("class_register_template_4_11_url", input_fields)
         self.assertIn("class_roster_sheet_url", input_fields)
         self.assertIn("subject_teacher_sheet_url", input_fields)
         self.assertIn("telegram_mapping_sheet_url", input_fields)

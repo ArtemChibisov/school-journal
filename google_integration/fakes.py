@@ -275,6 +275,11 @@ class FakeSheetsClient:
         book = self._require(spreadsheet_id)
         book.setdefault(title, [])
 
+    def duplicate_sheet(self, spreadsheet_id: str, source_title: str, new_title: str) -> None:
+        self.calls.append(("duplicate_sheet", (spreadsheet_id, source_title, new_title)))
+        rows = self._require_sheet(spreadsheet_id, source_title)
+        self.spreadsheets[spreadsheet_id][new_title] = [list(row) for row in rows]
+
     def delete_sheet(self, spreadsheet_id: str, title: str) -> None:
         self.calls.append(("delete_sheet", (spreadsheet_id, title)))
         self._require_sheet(spreadsheet_id, title)

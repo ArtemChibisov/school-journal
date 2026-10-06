@@ -4,6 +4,7 @@ from .views import (
     assistant_principals,
     module_registers,
     roster_import,
+    run_register_generation_view,
     run_register_scan_view,
     run_roster_import,
     run_subject_teacher_import,
@@ -22,4 +23,5 @@ urlpatterns = [
     path("subject-teachers/run/", run_subject_teacher_import, name="run_subject_teacher_import"),
     path("modules/", module_registers, name="module_registers"),
     path("modules/scan/", run_register_scan_view, name="run_register_scan"),
+    path("modules/generate/", run_register_generation_view, name="run_register_generation"),
 ]

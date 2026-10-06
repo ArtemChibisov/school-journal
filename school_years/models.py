@@ -15,7 +15,10 @@ class SchoolYear(models.Model):
     pdf_root_0_3_url = models.URLField(max_length=500, blank=True, default="")
     pdf_root_4_11_url = models.URLField(max_length=500, blank=True, default="")
     unsent_reports_folder_url = models.URLField(max_length=500, blank=True, default="")
-    class_register_template_url = models.URLField(max_length=500, blank=True, default="")
+    # Две половины школы оценивают по разным шкалам, поэтому и бланк журнала у них разный.
+    # Один шаблон на всех означал, что одной из половин его правят руками после копирования.
+    class_register_template_0_3_url = models.URLField(max_length=500, blank=True, default="")
+    class_register_template_4_11_url = models.URLField(max_length=500, blank=True, default="")
     class_roster_sheet_url = models.URLField(max_length=500, blank=True, default="")
     subject_teacher_sheet_url = models.URLField(max_length=500, blank=True, default="")
     telegram_mapping_sheet_url = models.URLField(max_length=500, blank=True, default="")
@@ -90,6 +93,43 @@ class SchoolModule(models.Model):
     def __str__(self) -> str:
         label = self.title or self.get_number_display()
         return f"{self.school_year} / {label}"
+
+
+class Student(models.Model):
+    """Ученик класса, как его называет «Состав классов».
+
+    Лист `students` импортёр читал и проверял с самого начала, но ничего из него не сохранял —
+    в базе оставались одни классы. Из-за этого списка учеников у системы не было вовсе, и
+    создавать журнал было не из чего.
+
+    Имя хранится целиком, как в таблице: делить его на имя и фамилию — задача того места, где
+    это нужно, а не хранилища. Фамилии бывают двойными, и одна неверная догадка размножается
+    по всем отчётам.
+    """
+
+    school_year = models.ForeignKey(SchoolYear, on_delete=models.CASCADE, related_name="students")
+    class_group = models.ForeignKey("ClassGroup", on_delete=models.CASCADE, related_name="students")
+    student_name = models.CharField(max_length=255)
+    student_order = models.PositiveIntegerField(default=0)
+    notes = models.CharField(max_length=500, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["class_group", "student_order", "student_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["class_group", "student_name"],
+                name="uq_student_class_name",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["school_year", "is_active"]),
+            models.Index(fields=["class_group"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.class_group}: {self.student_name}"
 
 
 class AssistantPrincipal(models.Model):

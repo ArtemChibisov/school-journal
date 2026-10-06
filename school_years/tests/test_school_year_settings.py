@@ -59,15 +59,17 @@ class CompletenessTests(TestCase):
         missing = missing_for_generation(year)
 
         self.assertNotIn("Таблица состава классов", missing)
-        self.assertIn("Шаблон class register", missing)
-        self.assertEqual(len(missing), 4)
+        self.assertIn("Шаблон журнала 0-3", missing)
+        self.assertIn("Шаблон журнала 4-11", missing)
+        self.assertEqual(len(missing), 5)
 
     def test_nothing_missing_when_the_required_links_are_set(self):
         year = SchoolYear.objects.create(
             name="25/26",
             class_roster_sheet_url=ROSTER_URL,
             subject_teacher_sheet_url=ROSTER_URL,
-            class_register_template_url=ROSTER_URL,
+            class_register_template_0_3_url=ROSTER_URL,
+            class_register_template_4_11_url=ROSTER_URL,
             register_root_0_3_url=FOLDER_URL,
             register_root_4_11_url=FOLDER_URL,
         )
@@ -80,7 +82,7 @@ class CompletenessTests(TestCase):
         filled, total = filled_link_count(year)
 
         self.assertEqual(filled, 1)
-        self.assertEqual(total, 13)
+        self.assertEqual(total, 14)
 
 
 class SchoolYearSettingsViewTests(TestCase):
@@ -178,14 +180,15 @@ class SchoolYearSettingsViewTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertContains(response, "ещё не готов к созданию журналов")
-        self.assertContains(response, "Шаблон class register")
+        self.assertContains(response, "Шаблон журнала 0-3")
 
     def test_confirms_readiness_when_required_links_are_set(self):
         SchoolYear.objects.create(
             name="25/26",
             class_roster_sheet_url=ROSTER_URL,
             subject_teacher_sheet_url=ROSTER_URL,
-            class_register_template_url=ROSTER_URL,
+            class_register_template_0_3_url=ROSTER_URL,
+            class_register_template_4_11_url=ROSTER_URL,
             register_root_0_3_url=FOLDER_URL,
             register_root_4_11_url=FOLDER_URL,
         )

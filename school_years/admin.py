@@ -61,7 +61,8 @@ class SchoolYearAdmin(admin.ModelAdmin):
             "Input sheets/templates",
             {
                 "fields": (
-                    "class_register_template_url",
+                    "class_register_template_0_3_url",
+                    "class_register_template_4_11_url",
                     "class_roster_sheet_url",
                     "subject_teacher_sheet_url",
                     "telegram_mapping_sheet_url",
