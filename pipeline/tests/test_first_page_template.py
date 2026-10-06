@@ -26,10 +26,13 @@ PLACEHOLDERS = (
 )
 
 
-def template_text() -> str:
+def template_document() -> str:
     path = LegacyDocxGenerator().template_path
-    document = zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
-    return "".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", document, re.S))
+    return zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
+
+
+def template_text() -> str:
+    return "".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", template_document(), re.S))
 
 
 class FirstPageTemplateTests(SimpleTestCase):
@@ -44,3 +47,18 @@ class FirstPageTemplateTests(SimpleTestCase):
 
     def test_no_module_dates_are_written_into_it(self):
         self.assertNotRegex(template_text(), r"\d\d\.\d\d\s*[-–]\s*\d\d\.\d\d")
+
+
+class LogoTests(SimpleTestCase):
+    """The logo used to float, and a floating image is placed by whoever opens the file.
+
+    Word put it inside the header cell; Google Docs pushed it right, off the page, cutting
+    «Школа Проектор» in half on every report. An inline image sits where the paragraph is,
+    and every reader agrees about that.
+    """
+
+    def test_the_logo_is_part_of_the_text_and_does_not_float(self):
+        document = template_document()
+
+        self.assertIn("<wp:inline", document)
+        self.assertNotIn("<wp:anchor", document)
