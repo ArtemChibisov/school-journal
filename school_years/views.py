@@ -111,11 +111,21 @@ def assistant_principals(request):
     if request.method == "POST":
         if not request.user.has_perm(RUN_PERMISSION):
             return HttpResponseForbidden("forbidden")
+
+        removing = AssistantPrincipal.objects.filter(pk=request.POST.get("delete")).first()
+        if removing is not None:
+            # Safe to remove outright: a report keeps the name it was signed with, as text,
+            # so nothing already sent changes because someone left the list.
+            name = removing.name
+            removing.delete()
+            messages.success(request, f"{name} — удалён.")
+            return redirect(reverse("school_years:assistant_principals"))
+
         instance = AssistantPrincipal.objects.filter(pk=request.POST.get("pk")).first()
         form = AssistantPrincipalForm(request.POST, instance=instance)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Сохранено.")
+            saved = form.save()
+            messages.success(request, f"{saved.name} — сохранён.")
             return redirect(reverse("school_years:assistant_principals"))
     else:
         form = AssistantPrincipalForm(instance=editing)

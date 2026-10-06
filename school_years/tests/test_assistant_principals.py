@@ -151,6 +151,46 @@ class ScreenTests(TestCase):
         self.assertEqual(principal.parallel_numbers, [7])
         self.assertEqual(AssistantPrincipal.objects.count(), 1)
 
+    def test_someone_can_be_removed(self):
+        AssistantPrincipal.objects.all().delete()
+        principal = AssistantPrincipal.objects.create(name=BELOV, parallels=[4])
+
+        self.client.post(self.url, {"delete": principal.pk})
+
+        self.assertFalse(AssistantPrincipal.objects.exists())
+
+    def test_removing_one_leaves_the_others(self):
+        AssistantPrincipal.objects.all().delete()
+        going = AssistantPrincipal.objects.create(name=BELOV, parallels=[4])
+        staying = AssistantPrincipal.objects.create(name=CHERKASOVA, parallels=[0])
+
+        self.client.post(self.url, {"delete": going.pk})
+
+        self.assertEqual(list(AssistantPrincipal.objects.all()), [staying])
+
+    def test_a_removal_does_not_also_save_the_form(self):
+        """The delete button sits in its own form, so nothing is edited on the way out."""
+
+        AssistantPrincipal.objects.all().delete()
+        principal = AssistantPrincipal.objects.create(name=BELOV, parallels=[4])
+        other = AssistantPrincipal.objects.create(name=CHERKASOVA, parallels=[0, 1, 2, 3])
+
+        self.client.post(self.url, {"delete": principal.pk})
+
+        other.refresh_from_db()
+        self.assertEqual(other.parallel_numbers, [0, 1, 2, 3])
+
+    def test_without_the_permission_nobody_can_be_removed(self):
+        AssistantPrincipal.objects.all().delete()
+        principal = AssistantPrincipal.objects.create(name=BELOV, parallels=[4])
+        self.user.user_permissions.remove(Permission.objects.get(codename="change_classsheetlink"))
+        self.client.force_login(get_user_model().objects.get(pk=self.user.pk))
+
+        response = self.client.post(self.url, {"delete": principal.pk})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(AssistantPrincipal.objects.filter(pk=principal.pk).exists())
+
     def test_without_the_permission_nothing_is_changed(self):
         self.user.user_permissions.remove(Permission.objects.get(codename="change_classsheetlink"))
         self.client.force_login(get_user_model().objects.get(pk=self.user.pk))

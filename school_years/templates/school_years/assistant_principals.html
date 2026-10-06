@@ -53,7 +53,14 @@
 
   <section class="card mb-4">
     <div class="card-body">
-      <h2 class="h5 mb-3">{% if editing %}Изменить завуча{% else %}Добавить завуча{% endif %}</h2>
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <h2 class="h5 mb-0">
+          {% if editing %}Изменить: {{ editing.name }}{% else %}Добавить завуча{% endif %}
+        </h2>
+        {% if editing %}
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'school_years:assistant_principals' %}">Добавить нового</a>
+        {% endif %}
+      </div>
 
       <form method="post" class="row g-3">
         {% csrf_token %}
@@ -87,7 +94,9 @@
         </div>
 
         <div class="col-12">
-          <button type="submit" class="btn btn-primary" {% if not can_edit %}disabled{% endif %}>Сохранить</button>
+          <button type="submit" class="btn btn-primary" {% if not can_edit %}disabled{% endif %}>
+            {% if editing %}Сохранить{% else %}Добавить{% endif %}
+          </button>
           {% if editing %}
             <a class="btn btn-outline-secondary ms-2" href="{% url 'school_years:assistant_principals' %}">Отменить</a>
           {% endif %}
@@ -120,18 +129,29 @@
                     <span class="badge badge-soft badge-partial">выключен</span>
                   {% endif %}
                 </td>
-                <td>
+                <td class="text-nowrap">
                   {% if can_edit %}
                     <a class="btn btn-outline-secondary btn-sm" href="?edit={{ principal.pk }}">Изменить</a>
+                    <button type="submit" form="remove-{{ principal.pk }}" class="btn btn-outline-danger btn-sm ms-1"
+                            onclick="return confirm('Удалить {{ principal.name|escapejs }}? Уже собранные отчёты не изменятся.')">Удалить</button>
                   {% endif %}
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="4" class="text-secondary">Пока никого.</td></tr>
+              <tr><td colspan="4" class="text-secondary">Пока никого — добавьте выше.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
   </section>
+
+  {% if can_edit %}
+    {% for principal in principals %}
+      <form id="remove-{{ principal.pk }}" method="post" class="d-none">
+        {% csrf_token %}
+        <input type="hidden" name="delete" value="{{ principal.pk }}">
+      </form>
+    {% endfor %}
+  {% endif %}
 {% endblock %}
