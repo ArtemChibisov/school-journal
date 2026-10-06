@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block page_title %}Состояние системы{% endblock %}
+{% block page_heading %}Состояние системы{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Главная</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Состояние системы</li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block content %}
+  {% if status.overall == "ok" %}
+    <div class="alert alert-success">Всё на месте: система настроена и готова к работе.</div>
+  {% elif status.overall == "warning" %}
+    <div class="alert alert-warning">
+      <strong>Работать можно, но есть что поправить.</strong>
+      Ниже отмечено жёлтым.
+    </div>
+  {% else %}
+    <div class="alert alert-danger">
+      <strong>Что-то не работает.</strong> Отмеченное красным нужно починить — без этого
+      часть шагов не пройдёт.
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width: 14rem;">Что проверено</th>
+              <th style="width: 10rem;">Состояние</th>
+              <th>Подробности</th>
+              <th style="width: 9rem;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in status.checks %}
+              <tr>
+                <td>{{ check.name }}</td>
+                <td>
+                  {% if check.state == "ok" %}
+                    <span class="badge badge-soft badge-success">в порядке</span>
+                  {% elif check.state == "warning" %}
+                    <span class="badge badge-soft badge-partial">внимание</span>
+                  {% else %}
+                    <span class="badge badge-soft badge-failed">не работает</span>
+                  {% endif %}
+                </td>
+                <td class="small">
+                  {{ check.summary }}
+                  {% if check.hint %}<div class="text-secondary">{{ check.hint }}</div>{% endif %}
+                </td>
+                <td>
+                  {% if check.url_name %}
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url check.url_name %}">Открыть</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <p class="text-secondary small mt-3 mb-0">
+    Страница ничего не запрашивает у Google и не отправляет писем — она смотрит на то, что
+    система уже знает. Проверки, которые ходят наружу, запускаются кнопками на своих страницах.
+  </p>
+{% endblock %}

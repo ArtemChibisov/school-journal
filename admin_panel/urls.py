@@ -14,11 +14,13 @@ from jobs.views import (
 )
 from notifications.views import telegram_webhook
 from admin_panel.monitoring_views import healthz, readyz
-from webapp.views import home, section
+from webapp.views import documentation, home, section, system_state
 
 urlpatterns = [
     path("", home, name="dashboard"),
     path("section/<str:key>/", section, name="section"),
+    path("docs/<str:key>/", documentation, name="documentation"),
+    path("system/", system_state, name="system_state"),
     path("admin/", admin.site.urls),
     path(
         "accounts/login/",

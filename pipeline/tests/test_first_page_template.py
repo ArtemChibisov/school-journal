@@ -31,6 +31,11 @@ def template_document() -> str:
     return zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
 
 
+def template_footer() -> str:
+    path = LegacyDocxGenerator().template_path
+    return zipfile.ZipFile(path).read("word/footer1.xml").decode("utf-8")
+
+
 def template_text() -> str:
     return "".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", template_document(), re.S))
 
@@ -81,6 +86,26 @@ class TutorPageTests(SimpleTestCase):
         document = template_document()
 
         self.assertLess(document.index("{%p endif %}"), document.index("Assistant Principal"))
+
+
+class FooterTests(SimpleTestCase):
+    """Внизу каждой страницы отчёта стоит учебный год.
+
+    Он был вписан текстом — «2025-2026» — и печатался на каждой странице каждого отчёта
+    следующего года тоже. Заметить это труднее, чем ошибку в шапке: колонтитул мелкий и
+    глаз его пропускает.
+    """
+
+    def test_the_year_is_filled_in_rather_than_typed(self):
+        footer = template_footer()
+
+        self.assertIn("{{SchoolYear}}", footer)
+
+    def test_no_year_is_written_into_it(self):
+        self.assertNotRegex(template_footer(), r"20\d\d\s*[-–/]\s*20\d\d")
+
+    def test_the_school_still_signs_it(self):
+        self.assertIn("Школа Проектор", template_footer())
 
 
 class LogoTests(SimpleTestCase):

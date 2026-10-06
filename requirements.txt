@@ -7,3 +7,4 @@ google-auth-oauthlib>=1.2
 google-api-python-client>=2.0
 openai>=1.0
 sentry-sdk>=2.0
+markdown>=3.5

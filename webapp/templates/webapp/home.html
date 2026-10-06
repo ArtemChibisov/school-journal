@@ -8,6 +8,24 @@
     Разделы ниже — в том порядке, в котором с ними работают.
   </p>
 
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Документация</h2>
+      <div class="row g-3">
+        {% for document in documents %}
+          <div class="col-12 col-md-6">
+            <a class="card h-100 text-decoration-none" href="{% url 'documentation' document.key %}">
+              <div class="card-body">
+                <div class="h6 mb-1">{{ document.title }}</div>
+                <div class="text-secondary small">{{ document.description }}</div>
+              </div>
+            </a>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
   <div class="row g-4">
     {% for section in sections %}
       <div class="col-12 col-xl-6">

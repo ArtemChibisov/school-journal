@@ -37,10 +37,12 @@ class VisibilityTests(TestCase):
     def _sections(self, path=""):
         return visible_sections(get_user_model().objects.get(pk=self.user.pk), path)
 
-    def test_a_user_without_rights_sees_only_what_needs_none(self):
+    def test_a_user_without_rights_sees_nothing(self):
+        """Каждая страница панели чего-то требует — пустых пунктов в меню не остаётся."""
+
         titles = {item["title"] for section in self._sections() for item in section["items"]}
 
-        self.assertEqual(titles, {"Мониторинг"})
+        self.assertEqual(titles, set())
 
     def test_rights_open_the_pages_they_cover(self):
         self.user.user_permissions.add(Permission.objects.get(codename="view_jobrun"))
@@ -51,9 +53,14 @@ class VisibilityTests(TestCase):
         self.assertNotIn("Контакты родителей", titles)
 
     def test_an_empty_section_is_not_shown(self):
+        self.assertEqual(self._sections(), [])
+
+    def test_rights_bring_the_section_back(self):
+        self.user.user_permissions.add(Permission.objects.get(codename="view_jobrun"))
+
         keys = {section["key"] for section in self._sections()}
 
-        self.assertEqual(keys, {"system"})
+        self.assertEqual(keys, {"module", "year", "system"})
 
     def test_the_current_page_is_marked(self):
         self.user.user_permissions.add(Permission.objects.get(codename="view_jobrun"))
