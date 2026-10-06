@@ -10,6 +10,7 @@ from journal_links.models import ClassSheetLink
 from pipeline.module_review_reports import JOB_TYPE, run_module_review_reports_job
 from school_years.models import ClassGroup, SchoolModule, SchoolYear
 
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 JUNIOR_FOLDER = "https://drive.google.com/drive/folders/junior0303030303"
 SENIOR_FOLDER = "https://drive.google.com/drive/folders/senior4114114114"
 
@@ -51,16 +52,29 @@ class ModuleReviewReportsTests(TestCase):
             is_active=True,
         )
 
-    def _child(self, status=JobRun.Status.SUCCESS, docx=3, uploaded=3):
+    def _child(self, status=JobRun.Status.SUCCESS, docx=3, uploaded=3, files=None):
         def runner(**kwargs):
             self.calls.append(kwargs)
+            built = [{"name": name} for name in (files or [])]
             return JobRun.objects.create(
                 job_type="prepare_student_review_reports",
                 status=status,
-                result_json={"summary": {"docx_created": docx, "uploaded_success": uploaded}},
+                result_json={
+                    "summary": {"docx_created": docx, "uploaded_success": uploaded},
+                    "files": built,
+                },
             )
 
         return runner
+
+    def _uploads(self, folder_name, names):
+        """Put files in a class folder the way a previous run would have left them."""
+
+        module_folder = self.drive.find_child(self.junior_root, "1 модуль/module")
+        class_folder = self.drive.find_child(module_folder["id"], folder_name)
+        for name in names:
+            self.drive.add_file(name, parent_id=class_folder["id"], mime_type=DOCX_MIME)
+        return class_folder["id"]
 
     def _run(self, runner=None, **kwargs):
         with patch(
@@ -186,6 +200,68 @@ class ModuleReviewReportsTests(TestCase):
                 job_run=job_run, message="Could not share the report folder"
             ).exists()
         )
+
+    def test_a_report_this_run_did_not_build_is_named_on_the_screen(self):
+        """A surname corrected in the журнал leaves the old report beside the right one."""
+
+        self._class("2А", 2)
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+        self._uploads("2А", ["2А Мирон Грiцай.docx"])
+
+        job_run = self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+
+        row = job_run.result_json["classes"][0]
+        self.assertEqual(row["extra_files"], ["2А Мирон Грiцай.docx"])
+        self.assertEqual(job_run.result_json["summary"]["extra_found"], 1)
+        self.assertNotIn("extra_removed", row)
+
+    def test_nothing_is_removed_unless_it_was_asked_for(self):
+        self._class("2А", 2)
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+        class_folder = self._uploads("2А", ["2А Старый отчёт.docx"])
+
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+
+        self.assertEqual(len(self.drive.list_children(class_folder)), 1)
+
+    def test_the_leftovers_go_to_the_bin_when_asked(self):
+        self._class("2А", 2)
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+        class_folder = self._uploads("2А", ["2А Старый отчёт.docx"])
+
+        job_run = self._run(
+            runner=self._child(files=["2А Мирон Грицай.docx"]), remove_extra_files=True
+        )
+
+        self.assertEqual(self.drive.list_children(class_folder), [])
+        self.assertEqual(job_run.result_json["summary"]["extra_removed"], 1)
+        self.assertEqual(
+            job_run.result_json["classes"][0]["extra_removed"], ["2А Старый отчёт.docx"]
+        )
+
+    def test_the_reports_this_run_built_are_never_touched(self):
+        self._class("2А", 2)
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+        class_folder = self._uploads("2А", ["2А Мирон Грицай.docx"])
+
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]), remove_extra_files=True)
+
+        self.assertEqual(len(self.drive.list_children(class_folder)), 1)
+
+    def test_after_a_failed_class_nothing_counts_as_a_leftover(self):
+        """Nothing was built, so everything in the folder is somebody's real report."""
+
+        self._class("2А", 2)
+        self._run(runner=self._child(files=["2А Мирон Грицай.docx"]))
+        class_folder = self._uploads("2А", ["2А Мирон Грицай.docx"])
+
+        job_run = self._run(
+            runner=self._child(status=JobRun.Status.FAILED, docx=0, uploaded=0, files=[]),
+            remove_extra_files=True,
+        )
+
+        self.assertEqual(job_run.result_json["summary"]["extra_found"], 0)
+        self.assertEqual(len(self.drive.list_children(class_folder)), 1)
 
     def test_only_the_chosen_classes_are_built(self):
         self._class("2А", 2)

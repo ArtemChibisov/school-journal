@@ -237,6 +237,7 @@ def student_review_reports(request):
             job_run = enqueue_module_review_reports_job(
                 module_id=module.pk,
                 class_codes=class_codes or None,
+                remove_extra_files=bool(form.cleaned_data.get("remove_extra_files")),
                 initiated_by=request.user if request.user.is_authenticated else None,
             )
             scope = ", ".join(class_codes) if class_codes else "все классы"

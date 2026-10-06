@@ -14,6 +14,12 @@ The folders it makes are owned by the Google account the system signs in with, a
 nobody shared is a folder nobody can open: the завуч was left clicking «Request access» on the
 school's own reports. So the module folder is opened to the address the year settings name,
 once per run, and the class folders and the files inherit it.
+
+A repeat run is the normal way to fix a class: a report is replaced by file name, keeping its
+id, so the link the завуч already has now opens the corrected version. What a repeat run
+cannot do is remove a report it no longer builds - a corrected surname makes a new file and
+leaves the old one beside it, both looking equally real. Those are counted and named on the
+screen, and removed only if the завуч asked for it.
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ from jobs.models import JobLog, JobRun
 from jobs.services import log_step
 from journal_links.models import ClassSheetLink
 from school_years.models import SchoolModule
-from google_integration.drive import ensure_shared
+from google_integration.drive import MIME_FOLDER, ensure_shared
 from google_integration.errors import GoogleIntegrationError
 from google_integration.ids import folder_url
 from school_years.report_folders import resolve_report_folder
@@ -84,8 +90,65 @@ def _open_module_folder_to_the_school(drive, module: SchoolModule, folder_id: st
         )
 
 
+def _files_not_from_this_run(drive, folder_id: str, built_names: set[str]) -> list[dict]:
+    """What is in the class folder that this run did not put there."""
+
+    return [
+        item
+        for item in drive.list_children(folder_id)
+        if item.get("mimeType") != MIME_FOLDER and item.get("name") not in built_names
+    ]
+
+
+def _leftovers(drive, folder_id: str, built: set[str], *, class_code: str, job_run) -> list[dict]:
+    """Name what the class folder holds besides this run's reports, and say so in the log."""
+
+    try:
+        found = _files_not_from_this_run(drive, folder_id, built)
+    except GoogleIntegrationError as exc:
+        log_step(
+            job_run=job_run,
+            level=JobLog.Level.WARNING,
+            message="Could not check the class folder for old reports",
+            context={"class_code": class_code, "reason": exc.technical_message},
+        )
+        return []
+
+    if found:
+        log_step(
+            job_run=job_run,
+            level=JobLog.Level.WARNING,
+            message="Files in the class folder were not built by this run",
+            context={"class_code": class_code, "files": [i.get("name") for i in found]},
+        )
+    return found
+
+
+def _move_to_bin(drive, items: list[dict], *, job_run) -> list[str]:
+    """Bin the leftovers, one by one, so one stubborn file does not keep the rest."""
+
+    removed: list[str] = []
+    for item in items:
+        try:
+            drive.trash_file(item["id"])
+        except GoogleIntegrationError as exc:
+            log_step(
+                job_run=job_run,
+                level=JobLog.Level.WARNING,
+                message="Could not remove a leftover report",
+                context={"name": item.get("name"), "reason": exc.technical_message},
+            )
+            continue
+        removed.append(item.get("name", ""))
+    return removed
+
+
 def enqueue_module_review_reports_job(
-    *, module_id: int, class_codes: list[str] | None = None, initiated_by=None
+    *,
+    module_id: int,
+    class_codes: list[str] | None = None,
+    remove_extra_files: bool = False,
+    initiated_by=None,
 ) -> JobRun:
     module = SchoolModule.objects.get(pk=module_id)
     job_run = JobRun.objects.create(
@@ -96,6 +159,7 @@ def enqueue_module_review_reports_job(
             "module_id": module.pk,
             "module": str(module),
             "class_codes": class_codes or [],
+            "remove_extra_files": remove_extra_files,
         },
         initiated_by=initiated_by,
     )
@@ -107,18 +171,30 @@ def enqueue_module_review_reports_job(
     )
 
     thread = threading.Thread(
-        target=_run_in_thread, args=(str(job_run.id), module.pk, class_codes), daemon=True
+        target=_run_in_thread,
+        args=(str(job_run.id), module.pk, class_codes, remove_extra_files),
+        daemon=True,
     )
     thread.start()
     return job_run
 
 
-def _run_in_thread(job_run_id: str, module_id: int, class_codes: list[str] | None) -> None:
+def _run_in_thread(
+    job_run_id: str,
+    module_id: int,
+    class_codes: list[str] | None,
+    remove_extra_files: bool = False,
+) -> None:
     close_old_connections()
     try:
         job_run = JobRun.objects.get(id=job_run_id)
         module = SchoolModule.objects.get(pk=module_id)
-        run_module_review_reports_job(module=module, class_codes=class_codes, job_run=job_run)
+        run_module_review_reports_job(
+            module=module,
+            class_codes=class_codes,
+            remove_extra_files=remove_extra_files,
+            job_run=job_run,
+        )
     except Exception as exc:  # noqa: BLE001
         try:
             job_run = JobRun.objects.get(id=job_run_id)
@@ -136,6 +212,7 @@ def run_module_review_reports_job(
     *,
     module: SchoolModule,
     class_codes: list[str] | None = None,
+    remove_extra_files: bool = False,
     job_run: JobRun | None = None,
     initiated_by=None,
     generator=None,
@@ -146,7 +223,12 @@ def run_module_review_reports_job(
             job_type=JOB_TYPE,
             status=JobRun.Status.RUNNING,
             started_at=timezone.now(),
-            params_json={"module_id": module.pk, "module": str(module), "class_codes": class_codes or []},
+            params_json={
+                "module_id": module.pk,
+                "module": str(module),
+                "class_codes": class_codes or [],
+                "remove_extra_files": remove_extra_files,
+            },
             initiated_by=initiated_by,
         )
     else:
@@ -164,6 +246,8 @@ def run_module_review_reports_job(
     rows: list[dict] = []
     docx_created = 0
     uploaded_success = 0
+    extra_found = 0
+    extra_removed = 0
     classes_done = 0
     classes_failed = 0
     classes_skipped = 0
@@ -232,15 +316,38 @@ def run_module_review_reports_job(
         else:
             classes_failed += 1
 
-        rows.append(
-            {
-                "class_code": link.class_code,
-                "status": child.status,
-                "docx_created": created,
-                "uploaded_success": uploaded,
-                "job_run_id": str(child.id),
-            }
-        )
+        row = {
+            "class_code": link.class_code,
+            "status": child.status,
+            "docx_created": created,
+            "uploaded_success": uploaded,
+            "job_run_id": str(child.id),
+        }
+
+        # Only worth asking when this run actually built something: after a failure every
+        # file in the folder looks like a leftover, and none of them is.
+        built = {
+            entry.get("name")
+            for entry in ((child.result_json or {}).get("files") or [])
+            if entry.get("name")
+        }
+        if built:
+            leftovers = _leftovers(
+                drive,
+                folders.class_folder_id,
+                built,
+                class_code=link.class_code,
+                job_run=job_run,
+            )
+            if leftovers:
+                extra_found += len(leftovers)
+                row["extra_files"] = [item.get("name", "") for item in leftovers]
+                if remove_extra_files:
+                    removed = _move_to_bin(drive, leftovers, job_run=job_run)
+                    extra_removed += len(removed)
+                    row["extra_removed"] = removed
+
+        rows.append(row)
 
     job_run.result_json = {
         "summary": {
@@ -250,6 +357,8 @@ def run_module_review_reports_job(
             "classes_skipped": classes_skipped,
             "docx_created": docx_created,
             "uploaded_success": uploaded_success,
+            "extra_found": extra_found,
+            "extra_removed": extra_removed,
         },
         "module": str(module),
         "module_number": module_number_for_reports(module),

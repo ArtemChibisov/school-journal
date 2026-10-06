@@ -53,6 +53,15 @@
           {{ form.class_links.errors }}
         </div>
         <div class="col-12">
+          <div class="form-check">
+            {{ form.remove_extra_files }}
+            <label class="form-check-label" for="{{ form.remove_extra_files.id_for_label }}">
+              {{ form.remove_extra_files.label }}
+            </label>
+          </div>
+          <div class="form-text">{{ form.remove_extra_files.help_text }}</div>
+        </div>
+        <div class="col-12">
           <button class="btn btn-primary" type="submit" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Сформировать DOCX-отчеты</button>
         </div>
       </form>
@@ -71,6 +80,9 @@
       <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">С ошибкой</div><div class="display-6 {% if counters.classes_failed %}text-danger{% endif %}">{{ counters.classes_failed }}</div></div></div></div>
       <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">DOCX создано</div><div class="display-6">{{ counters.docx_created }}</div></div></div></div>
       <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Загружено</div><div class="display-6">{{ counters.uploaded_success }}</div></div></div></div>
+      {% if counters.extra_found %}
+        <div class="col-12 col-md-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">{% if counters.extra_removed %}Убрано в корзину{% else %}Лишние файлы{% endif %}</div><div class="display-6 {% if not counters.extra_removed %}text-warning{% endif %}">{% if counters.extra_removed %}{{ counters.extra_removed }}{% else %}{{ counters.extra_found }}{% endif %}</div></div></div></div>
+      {% endif %}
     </section>
 
     {% if class_rows %}
@@ -85,6 +97,7 @@
                   <th style="width: 9rem;">Статус</th>
                   <th style="width: 8rem;">DOCX</th>
                   <th>Что не так</th>
+                  <th>Лишние файлы</th>
                   <th style="width: 7rem;">Детали</th>
                 </tr>
               </thead>
@@ -103,6 +116,13 @@
                     </td>
                     <td>{{ row.docx_created|default:"—" }}</td>
                     <td class="small text-secondary">{{ row.reason|default:"" }}</td>
+                    <td class="small">
+                      {% if row.extra_removed %}
+                        <span class="text-secondary">убрано в корзину: {{ row.extra_removed|join:", " }}</span>
+                      {% elif row.extra_files %}
+                        <span class="text-warning">{{ row.extra_files|join:", " }}</span>
+                      {% endif %}
+                    </td>
                     <td>
                       {% if row.job_run_id %}
                         <a class="btn btn-outline-secondary btn-sm" href="{% url 'job_run_detail' row.job_run_id %}">Открыть</a>

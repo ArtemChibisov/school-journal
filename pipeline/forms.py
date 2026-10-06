@@ -104,6 +104,14 @@ class StudentReviewReportsForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         help_text="Ничего не отмечено — значит все классы",
     )
+    # A repeat run replaces reports by file name, so a report whose name changed - a surname
+    # corrected in the журнал, a student who left - survives as a second, older file next to
+    # the right one. Off by default: moving someone's report to the bin is the завуч's call.
+    remove_extra_files = forms.BooleanField(
+        label="Убрать из папок классов файлы, которых нет в этом запуске",
+        required=False,
+        help_text="Они уйдут в корзину Google Drive — оттуда их можно вернуть в течение 30 дней",
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -123,5 +131,6 @@ class StudentReviewReportsForm(forms.Form):
 
         self.fields["module"].widget.attrs.setdefault("class", "form-select")
         self.fields["class_links"].widget.attrs.setdefault("class", "form-check-input")
+        self.fields["remove_extra_files"].widget.attrs.setdefault("class", "form-check-input")
 
 
