@@ -12,6 +12,7 @@ from itertools import count
 from .drive import (  # noqa: F401  (FILE_FIELDS documents the shape)
     FILE_FIELDS,
     MIME_FOLDER,
+    MIME_GOOGLE_DOC,
     PRINCIPAL_GROUP,
     ROLE_WRITER,
 )
@@ -35,6 +36,7 @@ class FakeDriveClient:
 
     def __init__(self):
         self.files: dict[str, dict] = {}
+        self.contents: dict[str, bytes] = {}
         self.permissions: dict[str, list[dict]] = {}
         self._ids = count(1)
         self.calls: list[tuple[str, tuple]] = []
@@ -57,7 +59,7 @@ class FakeDriveClient:
     ) -> str:
         return self._add(name, mime_type, parent_id=parent_id, file_id=file_id, prefix="file")
 
-    def _add(self, name, mime_type, *, parent_id, file_id, prefix) -> str:
+    def _add(self, name, mime_type, *, parent_id, file_id, prefix, content=b"") -> str:
         new_id = file_id or self._new_id(prefix)
         self.files[new_id] = {
             "id": new_id,
@@ -67,6 +69,7 @@ class FakeDriveClient:
             "parents": [parent_id] if parent_id else [],
             "trashed": False,
         }
+        self.contents[new_id] = content
         return new_id
 
     # -- DriveClient ---------------------------------------------------------------------
@@ -108,6 +111,7 @@ class FakeDriveClient:
         if source is None or source["trashed"]:
             raise _not_found(file_id)
         new_id = self.add_file(name, parent_id=parent_id, mime_type=mime_type or source["mimeType"])
+        self.contents[new_id] = self.contents.get(file_id, b"")
         return dict(self.files[new_id])
 
     def move_file(self, file_id: str, *, new_parent_id: str, old_parent_id: str) -> dict:
@@ -124,6 +128,42 @@ class FakeDriveClient:
         if item is None:
             raise _not_found(file_id)
         item["trashed"] = True
+
+    def delete_file(self, file_id: str) -> None:
+        self.calls.append(("delete_file", (file_id,)))
+        if file_id not in self.files:
+            raise _not_found(file_id)
+        del self.files[file_id]
+        self.contents.pop(file_id, None)
+
+    def export_file(self, file_id: str, mime_type: str) -> bytes:
+        self.calls.append(("export_file", (file_id, mime_type)))
+        item = self.files.get(file_id)
+        if item is None or item["trashed"]:
+            raise _not_found(file_id)
+        if item["mimeType"] != MIME_GOOGLE_DOC:
+            raise GoogleIntegrationError(
+                CATEGORY_NOT_FOUND,
+                f"Only Google documents can be exported, not {item['mimeType']}",
+                context={"file_id": file_id},
+            )
+        # Enough to tell one source from another in a test, which is all a fake owes anyone.
+        return b"%PDF-1.4 " + self.contents.get(file_id, b"")
+
+    def upload_bytes(self, parent_id: str, name: str, data: bytes, mime_type: str) -> dict:
+        self.calls.append(("upload_bytes", (parent_id, name, mime_type)))
+        if parent_id not in self.files:
+            raise _not_found(parent_id)
+        new_id = self._add(name, mime_type, parent_id=parent_id, file_id=None, prefix="file", content=data)
+        return dict(self.files[new_id])
+
+    def update_bytes(self, file_id: str, data: bytes, mime_type: str) -> dict:
+        self.calls.append(("update_bytes", (file_id, mime_type)))
+        item = self.files.get(file_id)
+        if item is None or item["trashed"]:
+            raise _not_found(file_id)
+        self.contents[file_id] = data
+        return dict(item)
 
     def list_permissions(self, file_id: str) -> list[dict]:
         self.calls.append(("list_permissions", (file_id,)))

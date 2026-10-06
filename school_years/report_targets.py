@@ -68,20 +68,44 @@ class ReportTarget:
     module_dates: str
     school_year: str
     docx_folder_url: str
+    pdf_folder_url: str
     is_primary: bool
     missing: str = ""
+    pdf_missing: str = ""
 
     @property
     def is_ready(self) -> bool:
+        """Ready to build DOCX. PDF has its own folder and its own answer."""
+
         return not self.missing
+
+    @property
+    def is_pdf_ready(self) -> bool:
+        return not self.pdf_missing
+
+
+def _folder_for(module: SchoolModule, kind: str, *, primary: bool) -> str:
+    """The module's own folder when it has one, otherwise the year's.
+
+    Setting the year's once is enough for a school that keeps all its reports together; a
+    module that wants its own folder overrides it without anyone filling six fields per module.
+    """
+
+    band = "0_3" if primary else "4_11"
+    own = getattr(module, f"{kind}_folder_{band}_url", "")
+    fallback = getattr(module.school_year, f"{kind}_root_{band}_url", "")
+    return (own or fallback or "").strip()
 
 
 def docx_target_for_class(module: SchoolModule, class_code: str) -> ReportTarget:
-    """Everything a DOCX run needs for one class, taken from the module it belongs to.
+    """Everything a run needs for one class, taken from the module it belongs to.
 
     Which folder depends on the year group, because the two halves of the school keep their
     reports apart. A class the roster does not know is treated as 4-11: that is where all but
     eleven of the classes are, and the run will say so rather than guess silently.
+
+    Both folders are resolved, and each refuses separately: a missing PDF folder is no reason
+    to withhold the DOCX a завуч is waiting to read.
     """
 
     group = (
@@ -90,33 +114,33 @@ def docx_target_for_class(module: SchoolModule, class_code: str) -> ReportTarget
         ).first()
     )
 
-    missing = ""
+    unknown_class = ""
     if group is None:
-        missing = f"Класс {class_code} не найден в составе классов"
+        unknown_class = f"Класс {class_code} не найден в составе классов"
         primary = False
     else:
         primary = is_primary_grade(group.grade_number)
 
-    # The module's own folder when it has one, otherwise the year's. Setting the year's once
-    # is enough for a school that keeps all its reports together; a module that wants its own
-    # folder overrides it without anyone having to fill in six fields per module.
-    if primary:
-        folder = module.docx_folder_0_3_url or module.school_year.docx_root_0_3_url
-    else:
-        folder = module.docx_folder_4_11_url or module.school_year.docx_root_4_11_url
-    folder = (folder or "").strip()
-    if not missing and not folder:
-        band = "0-3" if primary else "4-11"
-        missing = (
-            f"Не указана папка DOCX {band}: ни у модуля, ни в настройках года"
-        )
+    band = "0-3" if primary else "4-11"
+    docx_folder = _folder_for(module, "docx", primary=primary)
+    pdf_folder = _folder_for(module, "pdf", primary=primary)
+
+    missing = unknown_class
+    if not missing and not docx_folder:
+        missing = f"Не указана папка DOCX {band}: ни у модуля, ни в настройках года"
+
+    pdf_missing = unknown_class
+    if not pdf_missing and not pdf_folder:
+        pdf_missing = f"Не указана папка PDF {band}: ни у модуля, ни в настройках года"
 
     return ReportTarget(
         module=module,
         module_number=module_number_for_reports(module),
         module_dates=format_module_dates(module),
         school_year=format_school_year(module.school_year),
-        docx_folder_url=folder,
+        docx_folder_url=docx_folder,
+        pdf_folder_url=pdf_folder,
         is_primary=primary,
         missing=missing,
+        pdf_missing=pdf_missing,
     )

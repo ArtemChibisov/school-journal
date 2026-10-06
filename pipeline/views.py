@@ -27,6 +27,10 @@ from pipeline.module_review_reports import (
     JOB_TYPE as MODULE_REVIEW_REPORTS_JOB_TYPE,
     enqueue_module_review_reports_job,
 )
+from pipeline.module_pdf_reports import (
+    JOB_TYPE as MODULE_PDF_REPORTS_JOB_TYPE,
+    enqueue_module_pdf_reports_job,
+)
 
 
 def _parse_non_empty(value: str | None) -> str | None:
@@ -50,8 +54,20 @@ def _latest_ai_criteria_review_run() -> JobRun | None:
 
 
 def _latest_student_review_reports_run() -> JobRun | None:
+    """The last run this screen started, of any of the three kinds it can start.
+
+    Looking only at the per-class type left the screen showing a run from before modules
+    existed, while the module run the завуч had just started was nowhere on the page.
+    """
+
     return (
-        JobRun.objects.filter(job_type=STUDENT_REVIEW_REPORTS_JOB_TYPE)
+        JobRun.objects.filter(
+            job_type__in=[
+                MODULE_REVIEW_REPORTS_JOB_TYPE,
+                MODULE_PDF_REPORTS_JOB_TYPE,
+                STUDENT_REVIEW_REPORTS_JOB_TYPE,
+            ]
+        )
         .order_by("-started_at", "-id")
         .first()
     )
@@ -234,17 +250,32 @@ def student_review_reports(request):
             module = form.cleaned_data["module"]
             links = list(form.cleaned_data.get("class_links") or [])
             class_codes = [link.class_code for link in links]
-            job_run = enqueue_module_review_reports_job(
-                module_id=module.pk,
-                class_codes=class_codes or None,
-                remove_extra_files=bool(form.cleaned_data.get("remove_extra_files")),
-                initiated_by=request.user if request.user.is_authenticated else None,
-            )
             scope = ", ".join(class_codes) if class_codes else "все классы"
-            messages.success(
-                request,
-                f"Подготовка DOCX-отчётов запущена: {module.get_number_display()}, {scope}.",
-            )
+            initiated_by = request.user if request.user.is_authenticated else None
+
+            # Two buttons, one choice of module and classes: the завуч reads the DOCX first
+            # and makes the PDF copies afterwards, from the same place.
+            if "make_pdf" in request.POST:
+                job_run = enqueue_module_pdf_reports_job(
+                    module_id=module.pk,
+                    class_codes=class_codes or None,
+                    initiated_by=initiated_by,
+                )
+                messages.success(
+                    request,
+                    f"Сохранение отчётов в PDF запущено: {module.get_number_display()}, {scope}.",
+                )
+            else:
+                job_run = enqueue_module_review_reports_job(
+                    module_id=module.pk,
+                    class_codes=class_codes or None,
+                    remove_extra_files=bool(form.cleaned_data.get("remove_extra_files")),
+                    initiated_by=initiated_by,
+                )
+                messages.success(
+                    request,
+                    f"Подготовка DOCX-отчётов запущена: {module.get_number_display()}, {scope}.",
+                )
             return redirect(f"{reverse('pipeline:student_review_reports')}?run_id={job_run.id}")
     else:
         form = StudentReviewReportsForm()
@@ -254,7 +285,11 @@ def student_review_reports(request):
         job_run = get_object_or_404(
             JobRun,
             id=requested_run_id,
-            job_type__in=[MODULE_REVIEW_REPORTS_JOB_TYPE, STUDENT_REVIEW_REPORTS_JOB_TYPE],
+            job_type__in=[
+                MODULE_REVIEW_REPORTS_JOB_TYPE,
+                MODULE_PDF_REPORTS_JOB_TYPE,
+                STUDENT_REVIEW_REPORTS_JOB_TYPE,
+            ],
         )
     else:
         job_run = _latest_student_review_reports_run()

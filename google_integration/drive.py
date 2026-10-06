@@ -15,6 +15,9 @@ from .errors import CATEGORY_NOT_FOUND, GoogleIntegrationError
 MIME_FOLDER = "application/vnd.google-apps.folder"
 MIME_SPREADSHEET = "application/vnd.google-apps.spreadsheet"
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+MIME_GOOGLE_DOC = "application/vnd.google-apps.document"
+MIME_PDF = "application/pdf"
 
 FILE_FIELDS = "id,name,mimeType,webViewLink,parents,trashed"
 PERMISSION_FIELDS = "id,type,role,emailAddress"
@@ -43,6 +46,14 @@ class DriveClient(Protocol):
     def move_file(self, file_id: str, *, new_parent_id: str, old_parent_id: str) -> dict: ...
 
     def trash_file(self, file_id: str) -> None: ...
+
+    def delete_file(self, file_id: str) -> None: ...
+
+    def export_file(self, file_id: str, mime_type: str) -> bytes: ...
+
+    def upload_bytes(self, parent_id: str, name: str, data: bytes, mime_type: str) -> dict: ...
+
+    def update_bytes(self, file_id: str, data: bytes, mime_type: str) -> dict: ...
 
     def list_permissions(self, file_id: str) -> list[dict]: ...
 
@@ -174,6 +185,54 @@ class ApiDriveClient:
             self.service.files().update(
                 fileId=file_id, body={"trashed": True}, supportsAllDrives=True
             ).execute()
+
+    def delete_file(self, file_id: str) -> None:
+        """Permanent, so used only for a file this code made moments ago."""
+
+        with guard("drive.files.delete", file_id=file_id):
+            self.service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+
+    def export_file(self, file_id: str, mime_type: str) -> bytes:
+        """Ask Google to render one of its own documents in another format."""
+
+        with guard("drive.files.export", file_id=file_id, mime_type=mime_type):
+            return self.service.files().export(fileId=file_id, mimeType=mime_type).execute()
+
+    def _media(self, data: bytes, mime_type: str):
+        import io as _io
+
+        from googleapiclient.http import MediaIoBaseUpload
+
+        return MediaIoBaseUpload(_io.BytesIO(data), mimetype=mime_type, resumable=False)
+
+    def upload_bytes(self, parent_id: str, name: str, data: bytes, mime_type: str) -> dict:
+        body = {"name": name, "parents": [parent_id], "mimeType": mime_type}
+        with guard("drive.files.create", parent_id=parent_id, name=name):
+            return (
+                self.service.files()
+                .create(
+                    body=body,
+                    media_body=self._media(data, mime_type),
+                    fields=FILE_FIELDS,
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
+
+    def update_bytes(self, file_id: str, data: bytes, mime_type: str) -> dict:
+        """Replace the contents and keep the id, so a link already sent keeps working."""
+
+        with guard("drive.files.update", file_id=file_id):
+            return (
+                self.service.files()
+                .update(
+                    fileId=file_id,
+                    media_body=self._media(data, mime_type),
+                    fields=FILE_FIELDS,
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
 
     def list_permissions(self, file_id: str) -> list[dict]:
         with guard("drive.permissions.list", file_id=file_id):

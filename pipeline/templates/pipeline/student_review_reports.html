@@ -63,6 +63,8 @@
         </div>
         <div class="col-12">
           <button class="btn btn-primary" type="submit" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Сформировать DOCX-отчеты</button>
+          <button class="btn btn-outline-primary ms-2" type="submit" name="make_pdf" value="1" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Сохранить в PDF</button>
+          <div class="form-text">PDF делается из готовых DOCX, которые уже лежат в Drive — пересобирать отчёты не нужно.</div>
         </div>
       </form>
     </div>
