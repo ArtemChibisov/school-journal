@@ -17,6 +17,7 @@ JOB_TYPE_LABELS = {
     "convert_docx_to_pdf": "Конвертация DOCX в PDF",
     "module_pdf_reports": "Отчёты модуля в PDF",
     "module_pdf_scan": "Проверка готовности к PDF",
+    "parent_contact_import": "Импорт контактов родителей",
     "descriptor_criteria_fill_check": "Проверка заполненности журналов",
     "descriptor_fill_reminders": "Напоминания о заполнении",
     "download_descriptors": "Загрузка дескрипторов",

@@ -23,6 +23,7 @@ from pipeline.forms import (
 )
 from pipeline.models import AICriteriaReportTarget, CriterionEntry, CriterionReviewEvent, ParentContact, ValidCriterionTemplate
 from pipeline.parent_contacts import import_parent_contacts_csv
+from school_years.imports.parent_contact_sync import import_parent_contacts
 from pipeline.student_review_reports import JOB_TYPE as STUDENT_REVIEW_REPORTS_JOB_TYPE, enqueue_prepare_student_review_reports_job
 from pipeline.module_review_reports import (
     JOB_TYPE as MODULE_REVIEW_REPORTS_JOB_TYPE,
@@ -599,6 +600,60 @@ def override_criterion_valid(request, pk):
     )
     messages.success(request, "Критерий помечен как валидный по ручному override.")
     return redirect(request.POST.get("next") or "pipeline:criteria_failures")
+
+@login_required
+@permission_required_403("jobs.run_full_pipeline", message="Доступ запрещён: нет прав на импорт контактов.")
+@require_POST
+def parent_contacts_sheet_import(request):
+    """Pull the contacts from the Google Sheet named in the year settings.
+
+    The file upload stays for one-off fixes; this is the one the school repeats every time
+    the table changes, so it reads the link rather than asking for a file again.
+    """
+
+    from google_integration.errors import GoogleIntegrationError
+    from google_integration.status import build_clients
+    from school_years.models import SchoolYear
+
+    target = reverse("pipeline:parent_contacts_list")
+    school_year = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
+    if school_year is None:
+        messages.error(request, "Сначала создайте учебный год.")
+        return redirect(target)
+
+    try:
+        _, sheets = build_clients()
+    except GoogleIntegrationError as exc:
+        messages.error(request, exc.user_message)
+        return redirect(target)
+
+    job_run = import_parent_contacts(
+        school_year,
+        sheets=sheets,
+        initiated_by=request.user,
+        dry_run=request.POST.get("dry_run") == "1",
+    )
+
+    result = job_run.result_json or {}
+    if isinstance(result.get("error"), str):
+        messages.error(request, result["error"])
+        return redirect(target)
+
+    summary = result.get("summary", {})
+    sync = result.get("sync", {})
+    counts = result.get("issue_counts", {})
+    prefix = "Пробный прогон" if request.POST.get("dry_run") == "1" else "Импорт"
+    message = (
+        f"{prefix} завершён: учеников {summary.get('active', 0)}, "
+        f"добавлено {sync.get('created', 0)}, обновлено {sync.get('updated', 0)}, "
+        f"без контактов {summary.get('without_contacts', 0)}"
+    )
+    if counts.get("critical"):
+        messages.warning(request, f"{message}. Ошибок в строках: {counts['critical']}.")
+    else:
+        messages.success(request, message)
+    return redirect(f"{reverse('job_run_detail', args=[job_run.id])}")
+
 
 @login_required
 @permission_required_403("pipeline.view_parentcontact", message="Доступ запрещён: нет прав на просмотр контактов родителей.")

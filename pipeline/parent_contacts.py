@@ -65,9 +65,12 @@ def import_parent_contacts_csv(content: bytes) -> ImportResult:
             continue
 
         parallel = int(parallel_raw)
+        # The CSV shape has no class column, so these rows keep an empty one and are told
+        # apart by their parallel, the way they always were.
         _, created = ParentContact.objects.update_or_create(
             parallel=parallel,
             student_name=student_name,
+            class_code="",
             defaults={
                 "parent_email_1": email_1,
                 "parent_email_2": email_2,

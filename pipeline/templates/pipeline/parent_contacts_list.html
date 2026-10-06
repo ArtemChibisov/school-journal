@@ -31,6 +31,18 @@
  <section class="card mb-4">
     <div class="card-body">
       <h2 class="h5 mb-3">Импорт контактов</h2>
+
+      <form method="post" action="{% url 'pipeline:parent_contacts_sheet_import' %}" class="mb-4">
+        {% csrf_token %}
+        <p class="text-secondary small mb-2">
+          Берёт таблицу из настроек года — лист <code>parent_contacts</code>.
+          Ученик опознаётся по классу и имени; кого в таблице не стало, тот отключается, а не удаляется.
+        </p>
+        <button type="submit" class="btn btn-primary" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Импортировать из таблицы</button>
+        <button type="submit" name="dry_run" value="1" class="btn btn-outline-secondary ms-2" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Пробный прогон</button>
+      </form>
+
+      <h3 class="h6 text-secondary">Или загрузить файлом</h3>
       <form method="post" enctype="multipart/form-data" action="{% url 'pipeline:parent_contacts_import' %}" class="row g-3 align-items-end">
         {% csrf_token %}
         {% for field in import_form %}

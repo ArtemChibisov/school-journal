@@ -147,9 +147,14 @@ class ParentContact(models.Model):
     class Meta:
         ordering = ["parallel", "student_name"]
         constraints = [
+            # The class belongs in the key. Two students can share a name inside one parallel -
+            # 4А and 4К1 both having a Мария Иванова - and without the class one row overwrites
+            # the other, which means a child's report goes to another family's address.
+            # `parallel` stays in the key for rows imported before class codes were stored,
+            # which carry an empty class and are still told apart by their year group.
             models.UniqueConstraint(
-                fields=["parallel", "student_name"],
-                name="uq_parent_contact_parallel_student_name",
+                fields=["class_code", "parallel", "student_name"],
+                name="uq_parent_contact_class_parallel_student",
             )
         ]
         indexes = [

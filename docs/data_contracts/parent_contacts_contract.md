@@ -1,6 +1,6 @@
 # Parent Contacts Data Contract
 
-Status: draft.
+Status: implemented.
 
 Source example:
 `https://docs.google.com/spreadsheets/d/1ZE4Scnw93-gwA1596krcHfOtFFfDva2u82-Vj17y2uo/edit`
@@ -15,6 +15,28 @@ Related contracts and requirements:
 - `docs/data_contracts/class_roster_contract.md`
 - `docs/product_requirements_log.md`
 - `docs/mvp_development_plan.md`
+
+## 0. Implementation Notes
+
+Реализовано в `school_years/imports/parent_contacts.py` (разбор) и
+`school_years/imports/parent_contact_sync.py` (запись). Запускается кнопкой
+«Импортировать из таблицы» на `/parent-contacts/`.
+
+Решения, принятые школой при внедрении:
+
+- **Лист называется ровно `parent_contacts`**, латиницей. Импортёр ищет его по точному имени.
+- **Ученик опознаётся по классу и имени вместе.** Имени мало: тёзки в разных классах одной
+  параллели схлопнулись бы в одну строку, и отчёт ребёнка ушёл бы чужой семье. Ключ в базе —
+  `(class_code, parallel, student_name)`; `parallel` остался для строк, загруженных файлом,
+  у которых класса нет.
+- **Отсутствие адреса — не ошибка.** Строка хранится, ученик виден в отчёте как «без
+  контактов», школа дописывает адрес, когда узнаёт.
+- **Один адрес вместо двух — норма.** Позиция сохраняется: пусто в `parent_email_1` значит,
+  что в EduPage пуста колонка отца. На отправку это не влияет — пустые поля пропускаются.
+- **Заглушки вроде `changethisemail@now.cc` считаются обычными адресами** и не помечаются.
+- **Класс с ошибочной строкой не импортируется целиком.** Половина класса хуже, чем ничего:
+  рассылка пошла бы по классу, который выглядит полным.
+- **Выбывший ученик отключается, а не удаляется.** Адрес объясняет, что было отправлено.
 
 ## 1. Purpose
 
