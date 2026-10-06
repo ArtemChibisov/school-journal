@@ -35,6 +35,11 @@ FOLDER_FIELDS = (
     "unsent_reports_folder_url",
 )
 
+# Not a link, and not optional in practice: a folder the system makes is owned by the Google
+# account it signs in with, and until this address is given access the школа sees «Request
+# access» on its own reports.
+ACCESS_FIELDS = ("reports_access_group_email",)
+
 # Without these the system cannot create a class register at all. The rest are needed later in
 # the cycle, so an incomplete year is still worth saving.
 REQUIRED_FOR_GENERATION = (
@@ -59,13 +64,14 @@ FIELD_LABELS = {
     "pdf_root_0_3_url": "Папка PDF 0-3",
     "pdf_root_4_11_url": "Папка PDF 4-11",
     "unsent_reports_folder_url": "Папка «Неотправленные отчеты»",
+    "reports_access_group_email": "Доступ к отчётам",
 }
 
 
 class SchoolYearForm(forms.ModelForm):
     class Meta:
         model = SchoolYear
-        fields = ("name", "is_active", *SPREADSHEET_FIELDS, *FOLDER_FIELDS)
+        fields = ("name", "is_active", *SPREADSHEET_FIELDS, *FOLDER_FIELDS, *ACCESS_FIELDS)
         # Plain text fields rather than URL fields: the built-in validator answers in English
         # and rejects a bare Google id, which our own parser accepts. All link checking and
         # all wording live in clean() below.
@@ -74,6 +80,10 @@ class SchoolYearForm(forms.ModelForm):
         help_texts = {
             "name": "Например: 25/26",
             "is_active": "Год, с которым система работает по умолчанию",
+            "reports_access_group_email": (
+                "Google-группа школы или почта завуча. Система открывает доступ к папке "
+                "модуля, а папки классов и сами отчёты наследуют его."
+            ),
         }
 
     def __init__(self, *args, **kwargs):
@@ -85,6 +95,8 @@ class SchoolYearForm(forms.ModelForm):
             field.widget.attrs.setdefault("class", "form-control")
             if name.endswith("_url"):
                 field.widget.attrs.setdefault("placeholder", "https://...")
+            if name.endswith("_email"):
+                field.widget.attrs.setdefault("placeholder", "reports@school.example")
 
     def _validate_link(self, cleaned: dict, field_name: str, extractor) -> None:
         if field_name not in cleaned:

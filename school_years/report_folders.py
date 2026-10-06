@@ -13,9 +13,14 @@ one and find out at the end.
 
 `ensure_folder` is used rather than a plain create: Drive is happy to hold two folders with
 the same name in one parent, so a second run would otherwise quietly build a parallel tree.
+
+Both ids come back, because the module folder is the one worth sharing: everything under it
+inherits, so the school is given access once rather than once per class.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from google_integration.drive import ensure_folder
 from google_integration.ids import extract_folder_id
@@ -33,12 +38,20 @@ def module_folder_name(module: SchoolModule) -> str:
     return f"{module.number} модуль/module"
 
 
+@dataclass(frozen=True)
+class ReportFolders:
+    """The two folders a class's reports live under."""
+
+    module_folder_id: str
+    class_folder_id: str
+
+
 def resolve_report_folder(
     drive, *, root_folder_url: str, module: SchoolModule, class_code: str
-) -> str:
-    """The id of the class folder for this module, making both levels if they are missing."""
+) -> ReportFolders:
+    """The folders for this class and module, making both levels if they are missing."""
 
     root_id = extract_folder_id(root_folder_url)
     module_folder = ensure_folder(drive, root_id, module_folder_name(module))
     class_folder = ensure_folder(drive, module_folder["id"], class_code)
-    return class_folder["id"]
+    return ReportFolders(module_folder_id=module_folder["id"], class_folder_id=class_folder["id"])

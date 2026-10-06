@@ -114,6 +114,27 @@
     </div>
   </section>
 
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Кто видит отчёты</h2>
+      <p class="text-secondary small">
+        Папки модулей и классов создаёт сам сервис, и открыть их может только он.
+        Укажите, кому выдавать доступ — всё, что внутри, наследует его.
+      </p>
+
+      <div class="row g-3">
+        {% for field in access_fields %}
+          <div class="col-12 col-xl-6">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
   {% if can_edit %}
     <div class="d-flex gap-2 mb-4">
       <button class="btn btn-primary" type="submit">Сохранить</button>

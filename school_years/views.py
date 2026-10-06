@@ -20,6 +20,7 @@ from jobs.models import JobRun
 from journal_links.models import DescriptorCriteriaReportTarget
 
 from .forms import (
+    ACCESS_FIELDS,
     FOLDER_FIELDS,
     SPREADSHEET_FIELDS,
     SchoolModuleForm,
@@ -126,6 +127,7 @@ def school_year_settings(request):
             "can_edit": can_edit,
             "sheet_fields": [form[name] for name in SPREADSHEET_FIELDS],
             "folder_fields": [form[name] for name in FOLDER_FIELDS],
+            "access_fields": [form[name] for name in ACCESS_FIELDS],
             "missing": missing_for_generation(school_year) if school_year else [],
             "filled_count": filled_link_count(school_year) if school_year else (0, 0),
         },

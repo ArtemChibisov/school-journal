@@ -17,6 +17,11 @@ MIME_SPREADSHEET = "application/vnd.google-apps.spreadsheet"
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 FILE_FIELDS = "id,name,mimeType,webViewLink,parents,trashed"
+PERMISSION_FIELDS = "id,type,role,emailAddress"
+
+ROLE_WRITER = "writer"
+PRINCIPAL_GROUP = "group"
+PRINCIPAL_USER = "user"
 
 
 @runtime_checkable
@@ -38,6 +43,12 @@ class DriveClient(Protocol):
     def move_file(self, file_id: str, *, new_parent_id: str, old_parent_id: str) -> dict: ...
 
     def trash_file(self, file_id: str) -> None: ...
+
+    def list_permissions(self, file_id: str) -> list[dict]: ...
+
+    def share(
+        self, file_id: str, *, email: str, role: str = ROLE_WRITER, principal: str = PRINCIPAL_GROUP
+    ) -> dict: ...
 
 
 def _escape(value: str) -> str:
@@ -164,6 +175,43 @@ class ApiDriveClient:
                 fileId=file_id, body={"trashed": True}, supportsAllDrives=True
             ).execute()
 
+    def list_permissions(self, file_id: str) -> list[dict]:
+        with guard("drive.permissions.list", file_id=file_id):
+            response = (
+                self.service.permissions()
+                .list(
+                    fileId=file_id,
+                    fields=f"permissions({PERMISSION_FIELDS})",
+                    supportsAllDrives=True,
+                    pageSize=100,
+                )
+                .execute()
+            )
+        return response.get("permissions", [])
+
+    def share(
+        self, file_id: str, *, email: str, role: str = ROLE_WRITER, principal: str = PRINCIPAL_GROUP
+    ) -> dict:
+        """Give an address access to a file or folder.
+
+        No notification mail: the school is told about its reports by the platform, not by
+        thirty-two separate messages from Drive.
+        """
+
+        body = {"type": principal, "role": role, "emailAddress": email}
+        with guard("drive.permissions.create", file_id=file_id, email=email, role=role):
+            return (
+                self.service.permissions()
+                .create(
+                    fileId=file_id,
+                    body=body,
+                    fields=PERMISSION_FIELDS,
+                    sendNotificationEmail=False,
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
+
 
 def ensure_folder(client: DriveClient, parent_id: str, name: str) -> dict:
     """Return the existing subfolder with this name, or create it.
@@ -176,6 +224,34 @@ def ensure_folder(client: DriveClient, parent_id: str, name: str) -> dict:
     if existing:
         return existing
     return client.create_folder(parent_id, name)
+
+
+def ensure_shared(
+    client: DriveClient, file_id: str, email: str, *, role: str = ROLE_WRITER
+) -> bool:
+    """Make sure this address can open the file. Returns True when access was granted.
+
+    An address that already appears in the permissions is left exactly as it is: a school that
+    deliberately gave someone read-only access should not have it widened by a report run.
+
+    Drive wants to know whether the address is a group or a person, and the settings hold one
+    string either way. A group address is the usual answer, so it is tried first; `user` is the
+    fallback, because the alternative is telling the завуч that their own address is invalid.
+    """
+
+    wanted = (email or "").strip()
+    if not wanted:
+        return False
+
+    for permission in client.list_permissions(file_id):
+        if (permission.get("emailAddress") or "").strip().lower() == wanted.lower():
+            return False
+
+    try:
+        client.share(file_id, email=wanted, role=role, principal=PRINCIPAL_GROUP)
+    except GoogleIntegrationError:
+        client.share(file_id, email=wanted, role=role, principal=PRINCIPAL_USER)
+    return True
 
 
 def require_folder(client: DriveClient, folder_id: str) -> dict:

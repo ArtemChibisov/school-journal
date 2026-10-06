@@ -22,6 +22,10 @@ class SchoolYear(models.Model):
     parent_contacts_sheet_url = models.URLField(max_length=500, blank=True, default="")
     monitoring_sheet_url = models.URLField(max_length=500, blank=True, default="")
 
+    # Folders the system makes are owned by the Google account it signs in with, and nobody
+    # else can open them until they are shared. This is who they are shared with.
+    reports_access_group_email = models.EmailField(blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

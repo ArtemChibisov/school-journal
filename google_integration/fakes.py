@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from itertools import count
 
-from .drive import FILE_FIELDS, MIME_FOLDER  # noqa: F401  (FILE_FIELDS documents the shape)
+from .drive import (  # noqa: F401  (FILE_FIELDS documents the shape)
+    FILE_FIELDS,
+    MIME_FOLDER,
+    PRINCIPAL_GROUP,
+    ROLE_WRITER,
+)
 from .errors import CATEGORY_NOT_FOUND, GoogleIntegrationError
 
 
@@ -30,6 +35,7 @@ class FakeDriveClient:
 
     def __init__(self):
         self.files: dict[str, dict] = {}
+        self.permissions: dict[str, list[dict]] = {}
         self._ids = count(1)
         self.calls: list[tuple[str, tuple]] = []
 
@@ -118,6 +124,27 @@ class FakeDriveClient:
         if item is None:
             raise _not_found(file_id)
         item["trashed"] = True
+
+    def list_permissions(self, file_id: str) -> list[dict]:
+        self.calls.append(("list_permissions", (file_id,)))
+        if file_id not in self.files:
+            raise _not_found(file_id)
+        return [dict(item) for item in self.permissions.get(file_id, [])]
+
+    def share(
+        self, file_id: str, *, email: str, role: str = ROLE_WRITER, principal: str = PRINCIPAL_GROUP
+    ) -> dict:
+        self.calls.append(("share", (file_id, email, role, principal)))
+        if file_id not in self.files:
+            raise _not_found(file_id)
+        permission = {
+            "id": self._new_id("permission"),
+            "type": principal,
+            "role": role,
+            "emailAddress": email,
+        }
+        self.permissions.setdefault(file_id, []).append(permission)
+        return dict(permission)
 
 
 class FakeSheetsClient:

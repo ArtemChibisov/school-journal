@@ -43,11 +43,14 @@ class ResolveReportFolderTests(TestCase):
         )
 
     def test_both_levels_are_created(self):
-        folder_id = self._resolve()
+        folders = self._resolve()
 
         module_folder = self.drive.find_child(self.root, "1 модуль/module")
         self.assertIsNotNone(module_folder)
-        self.assertEqual(self.drive.find_child(module_folder["id"], "1А")["id"], folder_id)
+        self.assertEqual(folders.module_folder_id, module_folder["id"])
+        self.assertEqual(
+            self.drive.find_child(module_folder["id"], "1А")["id"], folders.class_folder_id
+        )
 
     def test_running_again_returns_the_same_folder(self):
         first = self._resolve()
@@ -68,6 +71,7 @@ class ResolveReportFolderTests(TestCase):
         first = self._resolve("1А")
         second = self._resolve("2Б")
 
-        self.assertNotEqual(first, second)
+        self.assertNotEqual(first.class_folder_id, second.class_folder_id)
+        self.assertEqual(first.module_folder_id, second.module_folder_id)
         module_folder = self.drive.find_child(self.root, "1 модуль/module")
         self.assertEqual(len(self.drive.list_children(module_folder["id"])), 2)

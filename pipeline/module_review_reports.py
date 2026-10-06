@@ -9,6 +9,11 @@ rate-limited by Google and learn nothing about which class failed.
 
 Each class still gets its own job run underneath, so its log, its file list and its errors stay
 where they always were. This one records which classes were done, which were skipped and why.
+
+The folders it makes are owned by the Google account the system signs in with, and a folder
+nobody shared is a folder nobody can open: the завуч was left clicking «Request access» on the
+school's own reports. So the module folder is opened to the address the year settings name,
+once per run, and the class folders and the files inherit it.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from jobs.models import JobLog, JobRun
 from jobs.services import log_step
 from journal_links.models import ClassSheetLink
 from school_years.models import SchoolModule
+from google_integration.drive import ensure_shared
 from google_integration.errors import GoogleIntegrationError
 from google_integration.ids import folder_url
 from school_years.report_folders import resolve_report_folder
@@ -39,6 +45,43 @@ def _class_links(class_codes: list[str] | None) -> list[ClassSheetLink]:
     if class_codes:
         queryset = queryset.filter(class_code__in=class_codes)
     return list(queryset.order_by("class_code", "id"))
+
+
+def _open_module_folder_to_the_school(drive, module: SchoolModule, folder_id: str, *, job_run) -> None:
+    """Share the module folder, and do not let a failed share cost anyone their reports.
+
+    Reports that exist but need one share are worth more than no reports at all, so this
+    complains in the log and lets the run carry on.
+    """
+
+    email = (module.school_year.reports_access_group_email or "").strip()
+    if not email:
+        log_step(
+            job_run=job_run,
+            level=JobLog.Level.WARNING,
+            message="No address to share the report folder with",
+            context={"hint": "Заполните «Доступ к отчётам» в настройках учебного года"},
+        )
+        return
+
+    try:
+        granted = ensure_shared(drive, folder_id, email)
+    except GoogleIntegrationError as exc:
+        log_step(
+            job_run=job_run,
+            level=JobLog.Level.WARNING,
+            message="Could not share the report folder",
+            context={"email": email, "folder_id": folder_id, "reason": exc.technical_message},
+        )
+        return
+
+    if granted:
+        log_step(
+            job_run=job_run,
+            level=JobLog.Level.INFO,
+            message="Report folder shared",
+            context={"email": email, "folder_id": folder_id},
+        )
 
 
 def enqueue_module_review_reports_job(
@@ -117,6 +160,7 @@ def run_module_review_reports_job(
         drive, _ = build_clients()
 
     links = _class_links(class_codes)
+    shared_folders: set[str] = set()
     rows: list[dict] = []
     docx_created = 0
     uploaded_success = 0
@@ -142,7 +186,7 @@ def run_module_review_reports_job(
         # The configured folder holds a folder per module, and that one a folder per class.
         # Both are made here if they do not exist yet.
         try:
-            class_folder_id = resolve_report_folder(
+            folders = resolve_report_folder(
                 drive,
                 root_folder_url=target.docx_folder_url,
                 module=module,
@@ -161,9 +205,16 @@ def run_module_review_reports_job(
             )
             continue
 
+        # Once per module folder, however many classes land in it.
+        if folders.module_folder_id not in shared_folders:
+            shared_folders.add(folders.module_folder_id)
+            _open_module_folder_to_the_school(
+                drive, module, folders.module_folder_id, job_run=job_run
+            )
+
         child = run_prepare_student_review_reports_job(
             class_sheet_link_id=link.id,
-            drive_folder_url=folder_url(class_folder_id),
+            drive_folder_url=folder_url(folders.class_folder_id),
             module_number=target.module_number,
             module_dates=target.module_dates,
             school_year=target.school_year,

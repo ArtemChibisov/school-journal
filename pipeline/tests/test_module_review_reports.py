@@ -3,8 +3,9 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from google_integration.errors import CATEGORY_PERMISSION_DENIED, GoogleIntegrationError
 from google_integration.fakes import FakeDriveClient
-from jobs.models import JobRun
+from jobs.models import JobLog, JobRun
 from journal_links.models import ClassSheetLink
 from pipeline.module_review_reports import JOB_TYPE, run_module_review_reports_job
 from school_years.models import ClassGroup, SchoolModule, SchoolYear
@@ -128,6 +129,63 @@ class ModuleReviewReportsTests(TestCase):
         self.assertEqual(self.calls[0]["module_number"], 1)
         self.assertEqual(self.calls[0]["module_dates"], "01.09 – 02.10.2026")
         self.assertEqual(self.calls[0]["school_year"], "2026-2027")
+
+    def test_the_module_folder_is_opened_to_the_school(self):
+        """One share for the whole module - the class folders and the files inherit it."""
+
+        self.year.reports_access_group_email = "reports@projector-school.info"
+        self.year.save()
+        self._class("2А", 2)
+        self._class("3А", 3)
+
+        self._run()
+
+        module_folder = self.drive.find_child(self.junior_root, "1 модуль/module")
+        permissions = self.drive.permissions[module_folder["id"]]
+        self.assertEqual(len(permissions), 1)
+        self.assertEqual(permissions[0]["emailAddress"], "reports@projector-school.info")
+
+    def test_each_half_of_the_school_gets_its_own_share(self):
+        self.year.reports_access_group_email = "reports@projector-school.info"
+        self.year.save()
+        self._class("2А", 2)
+        self._class("7А", 7)
+
+        self._run()
+
+        for root in (self.junior_root, self.senior_root):
+            module_folder = self.drive.find_child(root, "1 модуль/module")
+            self.assertEqual(len(self.drive.permissions[module_folder["id"]]), 1)
+
+    def test_without_an_address_the_run_says_so_and_carries_on(self):
+        self._class("2А", 2)
+
+        job_run = self._run()
+
+        self.assertEqual(job_run.result_json["summary"]["classes_done"], 1)
+        self.assertTrue(
+            JobLog.objects.filter(
+                job_run=job_run, message="No address to share the report folder with"
+            ).exists()
+        )
+
+    def test_a_refused_share_does_not_cost_anyone_their_reports(self):
+        self.year.reports_access_group_email = "reports@projector-school.info"
+        self.year.save()
+        self._class("2А", 2)
+
+        with patch(
+            "pipeline.module_review_reports.ensure_shared",
+            side_effect=GoogleIntegrationError(CATEGORY_PERMISSION_DENIED, "no rights"),
+        ):
+            job_run = self._run()
+
+        self.assertEqual(job_run.result_json["summary"]["classes_done"], 1)
+        self.assertTrue(
+            JobLog.objects.filter(
+                job_run=job_run, message="Could not share the report folder"
+            ).exists()
+        )
 
     def test_only_the_chosen_classes_are_built(self):
         self._class("2А", 2)
