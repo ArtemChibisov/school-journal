@@ -5,7 +5,6 @@ from django.utils import timezone
 from validation.services import validate_workbook
 from .models import JobLog, JobRun
 from .services import log_step
-from notifications.reminders import send_validation_reminders_for_job
 
 
 
@@ -14,7 +13,7 @@ class JobRunAdmin(admin.ModelAdmin):
     list_display = ("id", "job_type", "status", "started_at", "finished_at")
     list_filter = ("status", "job_type")
     search_fields = ("id", "job_type")
-    actions = ("run_validation_action", "send_telegram_reminders_action")
+    actions = ("run_validation_action",)
 
     @admin.action(description="Run validation for selected jobs")
     def run_validation_action(self, request, queryset):
@@ -73,34 +72,3 @@ class JobRunAdmin(admin.ModelAdmin):
             f"Validation action done. processed={processed}, failed={failed}",
             level=messages.INFO,
         )
-
-    @admin.action(description="Send Telegram reminders for selected jobs")
-    def send_telegram_reminders_action(self, request, queryset):
-        if not request.user.has_perm("jobs.send_reminders"):
-            raise PermissionDenied("Недостаточно прав для отправки напоминаний")
-        total_sent = 0
-        total_skipped = 0
-        total_errors = 0
-
-        for job in queryset:
-            result = send_validation_reminders_for_job(job)
-            total_sent += result["sent"]
-            total_skipped += result["skipped"]
-            total_errors += result["errors"]
-
-        self.message_user(
-            request,
-            (
-                "Telegram reminders sent. "
-                f"sent={total_sent}, skipped={total_skipped}, errors={total_errors}"
-            ),
-            level=messages.INFO,
-        )
-
-
-
-@admin.register(JobLog)
-class JobLogAdmin(admin.ModelAdmin):
-    list_display = ("job_run", "ts", "level", "message")
-    list_filter = ("level", "ts")
-    search_fields = ("message", "job_run__job_type")

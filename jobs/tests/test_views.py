@@ -66,23 +66,18 @@ class RunFullPipelineViewTests(TestCase):
         for codename in ("view_jobrun", "run_full_pipeline", "run_check_missing_data"):
             self.user.user_permissions.add(Permission.objects.get(codename=codename))
         self.client.force_login(self.user)
-    @patch("jobs.views.run_full_pipeline")
-    def test_post_runs_pipeline_and_redirects_to_detail(self, mocked_runner):
-        fake_job = JobRun(id=uuid.uuid4())
-        mocked_runner.return_value = fake_job
-
+    def test_the_full_pipeline_is_switched_off(self):
         response = self.client.post(reverse("run_full_pipeline"))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("job_run_detail", kwargs={"run_id": fake_job.id}))
-        mocked_runner.assert_called_once()
+        self.assertEqual(response.url, reverse("job_run_list"))
 
     def test_list_contains_full_pipeline_button(self):
         JobRun.objects.create(job_type="run_validation", status=JobRun.Status.PENDING)
         response = self.client.get(reverse("job_run_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Запустить полный пайплайн")
+        self.assertNotContains(response, "Запустить полный пайплайн")
         self.assertContains(response, "Проверить незаполненные (лог-чат)")
         self.assertContains(response, "badge-queued")
         self.assertContains(response, "queued")

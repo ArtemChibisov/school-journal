@@ -30,15 +30,21 @@ body {
   color: #1d4ed8;
 }
 
-/* Группы в боковом меню: что делают каждый модуль, что настраивают раз в год. */
+/* Заголовок группы в меню — ссылка на страницу раздела с описанием каждой страницы. */
 .nav-card .nav-section {
+  display: block;
   color: #667085;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  text-decoration: none;
   padding: 0.35rem 0.8rem 0.15rem;
   margin-top: 0.75rem;
+}
+
+.nav-card .nav-section:hover {
+  color: #1d4ed8;
 }
 
 .nav-card .nav-section:first-of-type {

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Главная{% endblock %}
+{% block page_heading %}School Journal{% endblock %}
+
+{% block content %}
+  <p class="text-secondary mb-4">
+    Панель собирает отчёты об успеваемости из журналов классов и рассылает их родителям.
+    Разделы ниже — в том порядке, в котором с ними работают.
+  </p>
+
+  <div class="row g-4">
+    {% for section in sections %}
+      <div class="col-12 col-xl-6">
+        <section class="card h-100">
+          <div class="card-body">
+            <h2 class="h5 mb-1">
+              <a class="text-decoration-none" href="{% url 'section' section.key %}">{{ section.title }}</a>
+            </h2>
+            <p class="text-secondary small mb-3">{{ section.description }}</p>
+
+            <ol class="list-unstyled mb-0">
+              {% for item in section.items %}
+                <li class="mb-2">
+                  <a class="fw-semibold text-decoration-none" href="{{ item.href }}">{{ item.title }}</a>
+                  <div class="text-secondary small">{{ item.description }}</div>
+                </li>
+              {% endfor %}
+            </ol>
+          </div>
+        </section>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        <div class="alert alert-secondary">У вашей учётной записи нет доступа ни к одному разделу.</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

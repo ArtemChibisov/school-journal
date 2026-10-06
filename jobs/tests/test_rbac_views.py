@@ -25,17 +25,17 @@ class RBACJobViewsTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("нельзя запускать полный пайплайн", response.content.decode("utf-8"))
 
-    @patch("jobs.views.run_full_pipeline")
-    def test_run_full_pipeline_allowed_with_permission(self, mocked_runner):
+    def test_run_full_pipeline_does_nothing_even_with_permission(self):
+        """Выключен: собирал отчёты из файлов на диске и рассылал их родителям."""
+
         self._grant("run_full_pipeline")
         self.client.force_login(self.user)
-        fake_job = JobRun(id=uuid.uuid4())
-        mocked_runner.return_value = fake_job
 
         response = self.client.post(reverse("run_full_pipeline"))
 
         self.assertEqual(response.status_code, 302)
-        mocked_runner.assert_called_once()
+        self.assertEqual(response.url, reverse("job_run_list"))
+        self.assertFalse(JobRun.objects.filter(job_type="full_pipeline").exists())
 
     def test_send_reminders_forbidden_without_permission(self):
         self.client.force_login(self.user)
@@ -45,21 +45,16 @@ class RBACJobViewsTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("нельзя отправлять напоминания", response.content.decode("utf-8"))
 
-    @patch("jobs.views.run_validation_reminders_job")
-    def test_send_reminders_allowed_with_permission(self, mocked_sender):
+    def test_send_reminders_does_nothing_even_with_permission(self):
+        """Выключено: сообщение состояло из вердикта модели и её подсказки."""
+
         self._grant("send_reminders")
         self.client.force_login(self.user)
-        reminder_job = JobRun.objects.create(
-            job_type="send_validation_reminders",
-            result_json={"summary": {"sent": 1, "skipped": 0, "errors": 0}},
-        )
-        mocked_sender.return_value = reminder_job
 
         response = self.client.post(reverse("send_reminders", kwargs={"run_id": self.job.id}))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("job_run_detail", kwargs={"run_id": reminder_job.id}))
-        mocked_sender.assert_called_once()
+        self.assertFalse(JobRun.objects.filter(job_type="send_validation_reminders").exists())
 
     def test_job_run_list_forbidden_without_view_permission(self):
         self.client.force_login(self.user)

@@ -14,9 +14,11 @@ from jobs.views import (
 )
 from notifications.views import telegram_webhook
 from admin_panel.monitoring_views import healthz, readyz
+from webapp.views import home, section
 
 urlpatterns = [
-    path("", RedirectView.as_view(pattern_name="journal_links:list_links", permanent=False), name="dashboard"),
+    path("", home, name="dashboard"),
+    path("section/<str:key>/", section, name="section"),
     path("admin/", admin.site.urls),
     path(
         "accounts/login/",

@@ -15,12 +15,6 @@
 {% if perms.pipeline.view_criterionentry %}
     <a class="btn btn-outline-primary" href="{% url 'pipeline:criteria_failures' %}">Следующий шаг: Двоечники</a>
   {% endif %}
-  {% if perms.jobs.run_full_pipeline %}
- <form method="post" action="{% url 'run_full_pipeline' %}">
-      {% csrf_token %}
-      <button class="btn btn-primary" type="submit">Запустить полный пайплайн</button>
-    </form>
-  {% endif %}
 {% endblock %}
 {% block content %}
   <section class="card mb-4">

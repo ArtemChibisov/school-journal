@@ -163,34 +163,7 @@ class SendValidationRemindersTests(TestCase):
 
 
 @override_settings(ADMIN_LOG_CHAT_ID="")
-class SendValidationRemindersCommandTests(TestCase):
-    @patch("notifications.reminders.send_telegram")
-    def test_command_accepts_job_id_and_prints_summary(self, _send_telegram_mock):
-        TeacherContact.objects.create(name="Teacher A", chat_id="111", is_active=True)
-        CriterionEntry.objects.create(
-            class_code="5A",
-            subject_name="Math",
-            teacher_name="Teacher A",
-            module_number=1,
-            criterion_text="Понимает геометрию",
-            validation_status=CriterionEntry.ValidationStatus.INVALID,
-            ai_fix_suggestion="Уточнить глагол",
-            source_sheet_name="Math",
-            source_workbook="w.xlsx",
-        )
-        job_run = JobRun.objects.create(job_type="run_validation", result_json={"issues": []})
 
-        from io import StringIO
-
-        out = StringIO()
-        call_command("send_validation_reminders", "--job-id", str(job_run.id), stdout=out)
-
-        output = out.getvalue()
-        self.assertIn("sent=1, skipped=0, errors=0", output)
-
-
-
-@override_settings(ADMIN_LOG_CHAT_ID="")
 class RunValidationRemindersJobTests(TestCase):
     @patch("notifications.reminders.send_telegram")
     def test_creates_separate_reminder_job_with_logs(self, send_telegram_mock):

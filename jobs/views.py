@@ -10,10 +10,8 @@ import csv
 import json
 from django.views.decorators.http import require_POST
 from admin_panel.authz import permission_required_403
-from notifications.reminders import run_validation_reminders_job
 from validation.job_runner import run_check_missing_data_job
 
-from pipeline.full_pipeline_runner import run_full_pipeline
 
 from .labels import job_type_label, labelled_job_types
 from .models import JobLog, JobRun
@@ -309,27 +307,41 @@ def export_run_issues_csv(request, run_id):
 @require_POST
 @permission_required_403("jobs.run_full_pipeline", message="Доступ запрещён: нельзя запускать полный пайплайн.")
 def run_full_pipeline_view(request):
-    job_run = run_full_pipeline(initiated_by=request.user if request.user.is_authenticated else None)
-    return redirect("job_run_detail", run_id=job_run.id)
+    """Выключен. Маршрут оставлен, чтобы старая ссылка отвечала словами, а не действием.
+
+    Полный прогон собирал отчёты из файлов на диске — без модуля, дат, года и завуча — и
+    рассылал их родителям, беря контакты из базы. Пока почта не была настроена, он упирался
+    в SMTP; после настройки он разослал бы всем семьям отчёты с пустой шапкой. Работа идёт
+    по экранам: отчёты, PDF, рассылка — каждый со своей проверкой.
+    """
+
+    messages.warning(
+        request,
+        "Полный прогон отключён. Пользуйтесь экранами: «Отчеты на проверку», "
+        "«Сохранение в PDF», «Рассылка родителям» — каждый с проверкой перед запуском.",
+    )
+    return redirect("job_run_list")
 
 @login_required
 @require_POST
 @permission_required_403("jobs.send_reminders", message="Доступ запрещён: нельзя отправлять напоминания.")
 def send_reminders_view(request, run_id):
-    source_job_run = get_object_or_404(JobRun, id=run_id)
-    reminder_job_run = run_validation_reminders_job(
-        source_job_run=source_job_run,
-        initiated_by=request.user if request.user.is_authenticated else None,
-    )
-    result = (reminder_job_run.result_json or {}).get("summary", {})
-    messages.success(
+    """Выключен. Школа решила не писать преподавателям о критериях по выводам ИИ.
+
+    Сообщение состояло из вердикта модели и её подсказки «как исправить». Отправлять такое
+    человеку от имени школы — значит выдавать мнение модели за требование завуча.
+
+    Напоминания о заполнении живут отдельно и работают: они говорят, что не заполнено, а не
+    что написано неправильно.
+    """
+
+    messages.warning(
         request,
-        (
-            "Уведомления учителям отправлены. "
-            f"sent={result.get('sent', 0)}, skipped={result.get('skipped', 0)}, errors={result.get('errors', 0)}"
-        ),
+        "Уведомления по результатам AI-вычитки отключены. "
+        "Напоминания о незаполненном — на странице «Напоминания».",
     )
-    return redirect("job_run_detail", run_id=reminder_job_run.id)
+    return redirect("job_run_detail", run_id=run_id)
+
 
 @login_required
 @require_POST
