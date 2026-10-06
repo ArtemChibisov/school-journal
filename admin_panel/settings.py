@@ -176,6 +176,35 @@ if env_bool("DJANGO_TRUST_PROXY_HEADERS", False):
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# --- Email ----------------------------------------------------------------------------
+# Reports to parents go out over SMTP, and until now nothing configured it: Django fell back
+# to localhost:25, where nothing answers inside the container, so every send failed on the
+# connection. The credentials were in the environment all along - only the legacy script read
+# them.
+#
+# Values are stripped of surrounding quotes: a .env written as SMTP_LOGIN="info@school.ge"
+# reaches the container with the quotes attached when Docker reads the file, and an address
+# in quotes fails SMTP authentication in a way that reads like a wrong password.
+
+
+def env_text(name: str, default: str = "") -> str:
+    return os.getenv(name, default).strip().strip('"').strip("'")
+
+
+EMAIL_BACKEND = env_text("EMAIL_BACKEND") or "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env_text("SMTP_HOST", "smtp.yandex.ru")
+EMAIL_PORT = int(env_text("SMTP_PORT", "465") or 465)
+EMAIL_HOST_USER = env_text("SMTP_LOGIN")
+EMAIL_HOST_PASSWORD = env_text("SMTP_PASSWORD")
+# 465 is SMTP over SSL, 587 is STARTTLS. Django refuses to have both set at once.
+EMAIL_USE_SSL = EMAIL_PORT == 465
+EMAIL_USE_TLS = EMAIL_PORT != 465
+DEFAULT_FROM_EMAIL = env_text("SMTP_FROM") or EMAIL_HOST_USER
+EMAIL_TIMEOUT = int(env_text("SMTP_TIMEOUT", "30") or 30)
+# A pause between letters, inherited from the legacy mailer: several hundred reports in one
+# run is exactly the shape of traffic a provider throttles.
+EMAIL_SEND_PAUSE_SECONDS = float(env_text("SMTP_SEND_PAUSE", "2") or 2)
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "")
 ADMIN_LOG_CHAT_ID = os.getenv("ADMIN_LOG_CHAT_ID", "")

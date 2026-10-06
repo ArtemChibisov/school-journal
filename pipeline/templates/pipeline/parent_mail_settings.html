@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block page_title %}Почта для родителей{% endblock %}
+{% block page_heading %}Почта для родителей{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'pipeline:parent_contacts_list' %}">Контакты родителей</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Почта</li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block content %}
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Что видит приложение</h2>
+      <p class="text-secondary small">
+        Это не содержимое файла на сервере, а настройки, которые реально дошли до приложения.
+        Пароль здесь не показывается — только то, задан ли он.
+      </p>
+
+      {% if mail.is_ready %}
+        <div class="alert alert-success">Почта настроена. Отправьте проверочное письмо, чтобы убедиться, что сервер пускает.</div>
+      {% else %}
+        <div class="alert alert-danger">
+          <strong>Письма не уйдут.</strong>
+          <ul class="mb-0 mt-2">
+            {% for problem in mail.problems %}<li>{{ problem }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Сервер</dt>
+        <dd class="col-sm-9">{{ mail.host|default:"—" }}:{{ mail.port }} ({{ mail.security }})</dd>
+
+        <dt class="col-sm-3">Логин</dt>
+        <dd class="col-sm-9">{{ mail.user|default:"—" }}</dd>
+
+        <dt class="col-sm-3">От кого</dt>
+        <dd class="col-sm-9">{{ mail.sender|default:"—" }}</dd>
+
+        <dt class="col-sm-3">Пароль</dt>
+        <dd class="col-sm-9">
+          {% if mail.password_set %}
+            задан, {{ mail.password_length }} символов
+          {% else %}
+            <span class="text-danger">не задан</span>
+          {% endif %}
+        </dd>
+
+        <dt class="col-sm-3">Пауза между письмами</dt>
+        <dd class="col-sm-9">{{ mail.pause_seconds }} с</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Проверочное письмо</h2>
+      <p class="text-secondary small">
+        Уйдёт на один адрес, без вложения и без чьих-либо данных. Внутри — тот самый текст,
+        который получат родители.
+      </p>
+
+      <form method="post" action="{% url 'pipeline:send_test_letter' %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="id_to">Кому</label>
+          <input id="id_to" type="email" name="to" value="{{ test_to }}" class="form-control" placeholder="ваш@адрес" required>
+        </div>
+        <div class="col-12 col-md-auto">
+          <button type="submit" class="btn btn-primary" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Отправить проверочное</button>
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock %}

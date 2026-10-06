@@ -22,6 +22,8 @@ from pipeline.forms import (
     ValidCriterionTemplateForm,
 )
 from pipeline.models import AICriteriaReportTarget, CriterionEntry, CriterionReviewEvent, ParentContact, ValidCriterionTemplate
+from pipeline.mail_status import mail_status
+from pipeline.parent_letter import letter_for
 from pipeline.parent_contacts import import_parent_contacts_csv
 from school_years.imports.parent_contact_sync import import_parent_contacts
 from pipeline.student_review_reports import JOB_TYPE as STUDENT_REVIEW_REPORTS_JOB_TYPE, enqueue_prepare_student_review_reports_job
@@ -243,6 +245,65 @@ def ai_criteria_report_target(request):
         "pipeline/ai_criteria_report_target.html",
         {"form": form, "target": target},
     )
+
+
+@login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр отправки.")
+def parent_mail_settings(request):
+    """What the running application knows about its mailbox, and a letter to prove it.
+
+    Reading the file on the server answers a different question than whether the settings
+    reached Django, so the application is asked instead - and a test letter settles the rest.
+    """
+
+    return render(
+        request,
+        "pipeline/parent_mail_settings.html",
+        {"mail": mail_status(), "test_to": request.GET.get("to", "")},
+    )
+
+
+@login_required
+@permission_required_403("jobs.run_full_pipeline", message="Доступ запрещён: нет прав на отправку.")
+@require_POST
+def send_test_letter(request):
+    """One letter to one address, with nobody's report attached."""
+
+    from django.core.mail import EmailMessage
+
+    from school_years.models import SchoolModule, SchoolYear
+
+    target = reverse("pipeline:parent_mail_settings")
+    address = (request.POST.get("to") or "").strip()
+    if not address:
+        messages.error(request, "Укажите адрес, на который отправить проверочное письмо.")
+        return redirect(target)
+
+    year = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
+    module = (
+        SchoolModule.objects.filter(school_year=year).order_by("number").first() if year else None
+    )
+    if module is None:
+        messages.error(request, "Сначала заведите учебный год и модуль — из них берётся текст письма.")
+        return redirect(target)
+
+    subject, body = letter_for(student_name="Мария Иванова", module=module, class_code="4А")
+    try:
+        EmailMessage(
+            subject=f"[Проверка] {subject}",
+            body=(
+                "Это проверочное письмо, отправленное из панели.\n"
+                "Ниже — текст, который получат родители.\n\n"
+                f"{body}"
+            ),
+            to=[address],
+        ).send(fail_silently=False)
+    except Exception as exc:  # noqa: BLE001
+        messages.error(request, f"Отправить не удалось: {exc}")
+        return redirect(f"{target}?to={address}")
+
+    messages.success(request, f"Письмо отправлено на {address}. Проверьте ящик, в том числе «Спам».")
+    return redirect(f"{target}?to={address}")
 
 
 @login_required
