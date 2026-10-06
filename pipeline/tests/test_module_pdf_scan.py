@@ -114,6 +114,19 @@ class ModulePdfScanTests(TestCase):
 
         self.assertEqual(row["reason"], "PDF есть не для всех: 1 из 3")
 
+    def test_more_pdf_than_reports_is_not_reported_as_all_done(self):
+        """A PDF whose DOCX is gone is replaced by nothing - it just stays."""
+
+        self._class("2А")
+        self._put(self.docx_root, "2А", ["2А Грицай.docx"], MIME_DOCX)
+        self._put(self.pdf_root, "2А", ["2А Грицай.pdf", "2А Грiцай.pdf"], MIME_PDF)
+
+        row = self._row(self._run(), "2А")
+
+        self.assertEqual(row["extra_pdf"], 1)
+        self.assertIn("Лишние останутся", row["reason"])
+        self.assertNotIn("заменит", row["reason"].split("—")[0])
+
     def test_a_missing_pdf_folder_is_reported_before_anyone_presses_save(self):
         self.module.pdf_folder_0_3_url = ""
         self.module.save()

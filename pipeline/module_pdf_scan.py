@@ -119,12 +119,20 @@ def scan_class(drive, module: SchoolModule, class_code: str) -> dict:
         row["pdf_folder_url"] = folder_url(destination.class_folder_id)
 
     row["ready"] = True
-    # Said plainly, because «15 и 15» and «15 и 3» mean quite different things to someone
-    # deciding whether to press the button.
+    # Said plainly, because «15 и 15», «15 и 3» and «15 и 17» mean quite different things to
+    # someone deciding whether to press the button.
     if not row["pdf"]:
         row["reason"] = "Готов к сохранению в PDF"
     elif row["pdf"] < row["docx"]:
         row["reason"] = f"PDF есть не для всех: {row['pdf']} из {row['docx']}"
+    elif row["pdf"] > row["docx"]:
+        # Matching is by file name, so a PDF whose DOCX no longer exists is not replaced by
+        # anything - it simply stays. Saying «повторный запуск их заменит» would be a lie.
+        row["extra_pdf"] = row["pdf"] - row["docx"]
+        row["reason"] = (
+            f"PDF больше, чем отчётов: {row['pdf']} против {row['docx']}. "
+            "Лишние останутся — запуск их не тронет"
+        )
     else:
         row["reason"] = "PDF уже сделаны — повторный запуск их заменит"
     return row
