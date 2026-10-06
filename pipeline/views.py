@@ -17,6 +17,7 @@ from pipeline.forms import (
     AICriteriaReportTargetForm,
     ParentContactForm,
     ParentContactsImportForm,
+    ModulePdfReportsForm,
     StudentReviewReportsForm,
     ValidCriterionTemplateForm,
 )
@@ -30,6 +31,10 @@ from pipeline.module_review_reports import (
 from pipeline.module_pdf_reports import (
     JOB_TYPE as MODULE_PDF_REPORTS_JOB_TYPE,
     enqueue_module_pdf_reports_job,
+)
+from pipeline.module_pdf_scan import (
+    JOB_TYPE as MODULE_PDF_SCAN_JOB_TYPE,
+    enqueue_module_pdf_scan_job,
 )
 
 
@@ -240,6 +245,85 @@ def ai_criteria_report_target(request):
 
 
 @login_required
+@permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр сохранения в PDF.")
+def module_pdf_reports(request):
+    """Check what is ready, then save it. Both read the same folders in Drive.
+
+    The check exists because the PDF step converts whatever a class folder holds, so «какие
+    классы можно запустить» is a question about Drive and not about the database. Finding the
+    answer by pressing the button and reading the skips is the wrong way round.
+    """
+
+    if request.method == "POST":
+        if not request.user.has_perm("jobs.run_full_pipeline"):
+            return HttpResponse("forbidden", status=403)
+        form = ModulePdfReportsForm(request.POST)
+        if form.is_valid():
+            module = form.cleaned_data["module"]
+            links = list(form.cleaned_data.get("class_links") or [])
+            class_codes = [link.class_code for link in links]
+            scope = ", ".join(class_codes) if class_codes else "все классы"
+            initiated_by = request.user if request.user.is_authenticated else None
+
+            if "save_pdf" in request.POST:
+                job_run = enqueue_module_pdf_reports_job(
+                    module_id=module.pk,
+                    class_codes=class_codes or None,
+                    initiated_by=initiated_by,
+                )
+                messages.success(
+                    request,
+                    f"Сохранение в PDF запущено: {module.get_number_display()}, {scope}.",
+                )
+            else:
+                job_run = enqueue_module_pdf_scan_job(
+                    module_id=module.pk,
+                    class_codes=class_codes or None,
+                    initiated_by=initiated_by,
+                )
+                messages.success(
+                    request, f"Проверка готовности запущена: {module.get_number_display()}, {scope}."
+                )
+            return redirect(f"{reverse('pipeline:module_pdf_reports')}?run_id={job_run.id}")
+    else:
+        form = ModulePdfReportsForm()
+
+    requested_run_id = _parse_non_empty(request.GET.get("run_id"))
+    if requested_run_id:
+        job_run = get_object_or_404(
+            JobRun,
+            id=requested_run_id,
+            job_type__in=[MODULE_PDF_SCAN_JOB_TYPE, MODULE_PDF_REPORTS_JOB_TYPE],
+        )
+    else:
+        job_run = (
+            JobRun.objects.filter(
+                job_type__in=[MODULE_PDF_SCAN_JOB_TYPE, MODULE_PDF_REPORTS_JOB_TYPE]
+            )
+            .order_by("-started_at", "-id")
+            .first()
+        )
+
+    result = job_run.result_json if job_run and isinstance(job_run.result_json, dict) else {}
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    rows = result.get("classes") if isinstance(result.get("classes"), list) else []
+    is_scan = bool(job_run and job_run.job_type == MODULE_PDF_SCAN_JOB_TYPE)
+
+    return render(
+        request,
+        "pipeline/module_pdf_reports.html",
+        {
+            "form": form,
+            "job_run": job_run,
+            "summary": summary,
+            "rows": rows,
+            "is_scan": is_scan,
+            "result": result,
+        },
+    )
+
+
+@login_required
 @permission_required_403("jobs.view_jobrun", message="Доступ запрещён: нет прав на просмотр отчетов на проверку.")
 def student_review_reports(request):
     if request.method == "POST":
@@ -251,31 +335,16 @@ def student_review_reports(request):
             links = list(form.cleaned_data.get("class_links") or [])
             class_codes = [link.class_code for link in links]
             scope = ", ".join(class_codes) if class_codes else "все классы"
-            initiated_by = request.user if request.user.is_authenticated else None
-
-            # Two buttons, one choice of module and classes: the завуч reads the DOCX first
-            # and makes the PDF copies afterwards, from the same place.
-            if "make_pdf" in request.POST:
-                job_run = enqueue_module_pdf_reports_job(
-                    module_id=module.pk,
-                    class_codes=class_codes or None,
-                    initiated_by=initiated_by,
-                )
-                messages.success(
-                    request,
-                    f"Сохранение отчётов в PDF запущено: {module.get_number_display()}, {scope}.",
-                )
-            else:
-                job_run = enqueue_module_review_reports_job(
-                    module_id=module.pk,
-                    class_codes=class_codes or None,
-                    remove_extra_files=bool(form.cleaned_data.get("remove_extra_files")),
-                    initiated_by=initiated_by,
-                )
-                messages.success(
-                    request,
-                    f"Подготовка DOCX-отчётов запущена: {module.get_number_display()}, {scope}.",
-                )
+            job_run = enqueue_module_review_reports_job(
+                module_id=module.pk,
+                class_codes=class_codes or None,
+                remove_extra_files=bool(form.cleaned_data.get("remove_extra_files")),
+                initiated_by=request.user if request.user.is_authenticated else None,
+            )
+            messages.success(
+                request,
+                f"Подготовка DOCX-отчётов запущена: {module.get_number_display()}, {scope}.",
+            )
             return redirect(f"{reverse('pipeline:student_review_reports')}?run_id={job_run.id}")
     else:
         form = StudentReviewReportsForm()

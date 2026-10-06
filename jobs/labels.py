@@ -16,6 +16,7 @@ JOB_TYPE_LABELS = {
     "class_roster_import": "Импорт состава классов",
     "convert_docx_to_pdf": "Конвертация DOCX в PDF",
     "module_pdf_reports": "Отчёты модуля в PDF",
+    "module_pdf_scan": "Проверка готовности к PDF",
     "descriptor_criteria_fill_check": "Проверка заполненности журналов",
     "descriptor_fill_reminders": "Напоминания о заполнении",
     "download_descriptors": "Загрузка дескрипторов",

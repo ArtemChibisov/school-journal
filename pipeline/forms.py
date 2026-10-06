@@ -83,6 +83,47 @@ class AICriteriaReportTargetForm(forms.ModelForm):
         self.fields["is_active"].widget.attrs.setdefault("class", "form-check-input")
 
 
+class ModulePdfReportsForm(forms.Form):
+    """The PDF step has its own page, because it answers a different question.
+
+    Building reports reads журналы; saving them as PDF reads folders. Which classes can be
+    saved is therefore something only Drive knows, so the page checks first and converts
+    second - with the same module and the same ticks.
+    """
+
+    module = forms.ModelChoiceField(
+        queryset=SchoolModule.objects.none(),
+        label="Модуль",
+        empty_label=None,
+    )
+    class_links = forms.ModelMultipleChoiceField(
+        queryset=ClassSheetLink.objects.none(),
+        label="Классы",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Ничего не отмечено — значит все классы",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["class_links"].queryset = ClassSheetLink.objects.filter(
+            is_active=True
+        ).order_by("class_code", "id")
+
+        school_year = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
+        modules = (
+            SchoolModule.objects.filter(school_year=school_year).order_by("number")
+            if school_year
+            else SchoolModule.objects.none()
+        )
+        self.fields["module"].queryset = modules
+        if not self.is_bound:
+            self.fields["module"].initial = modules.first()
+
+        self.fields["module"].widget.attrs.setdefault("class", "form-select")
+        self.fields["class_links"].widget.attrs.setdefault("class", "form-check-input")
+
+
 class StudentReviewReportsForm(forms.Form):
     """Which class, for which module. Everything else the module already knows.
 

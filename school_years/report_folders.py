@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from google_integration.drive import ensure_folder
+from google_integration.drive import MIME_FOLDER, ensure_folder
 from google_integration.ids import extract_folder_id
 
 from .models import SchoolModule
@@ -44,6 +44,26 @@ class ReportFolders:
 
     module_folder_id: str
     class_folder_id: str
+
+
+def find_report_folder(
+    drive, *, root_folder_url: str, module: SchoolModule, class_code: str
+) -> ReportFolders | None:
+    """The folders for this class, if they already exist. Nothing is created.
+
+    Used when reading rather than writing. Asking `resolve_report_folder` where a class's
+    reports are would build the empty tree it was asked about, which is how pressing the PDF
+    button before the DOCX one littered both roots with empty folders.
+    """
+
+    root_id = extract_folder_id(root_folder_url)
+    module_folder = drive.find_child(root_id, module_folder_name(module), mime_type=MIME_FOLDER)
+    if module_folder is None:
+        return None
+    class_folder = drive.find_child(module_folder["id"], class_code, mime_type=MIME_FOLDER)
+    if class_folder is None:
+        return None
+    return ReportFolders(module_folder_id=module_folder["id"], class_folder_id=class_folder["id"])
 
 
 def resolve_report_folder(

@@ -145,6 +145,32 @@ class ModulePdfReportsTests(TestCase):
         self.assertIn("сначала соберите", row["reason"])
         self.assertEqual(job_run.result_json["summary"]["docx_created"], 0)
 
+    def test_pressing_it_before_the_reports_exist_creates_nothing(self):
+        """Wrong button, wrong order - and Drive is left exactly as it was."""
+
+        self._class("2А", 2)
+        self._class("7А", 7)
+        before = set(self.drive.files)
+
+        self._run()
+
+        self.assertEqual(set(self.drive.files), before)
+        self.assertEqual(self.drive.list_children(self.pdf_root), [])
+        self.assertEqual(self.drive.list_children(self.docx_root), [])
+
+    def test_asking_where_the_reports_are_does_not_build_the_folder(self):
+        """A class whose DOCX folder was never made is read, not created."""
+
+        self._class("2А", 2)
+        self._reports("2А", ["2А Иванов.docx"])
+        self._class("3А", 3)
+
+        self._run()
+
+        module_folder = self.drive.find_child(self.docx_root, "1 модуль/module")
+        self.assertIsNone(self.drive.find_child(module_folder["id"], "3А"))
+        self.assertIsNone(self._pdf_class_folder("3А"))
+
     def test_without_a_pdf_folder_the_class_says_so_rather_than_guessing(self):
         self.module.pdf_folder_0_3_url = ""
         self.module.save()

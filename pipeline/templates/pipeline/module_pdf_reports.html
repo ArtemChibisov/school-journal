@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block page_title %}Сохранение в PDF{% endblock %}
+{% block page_heading %}Сохранение в PDF{% endblock %}
+{% block extra_head %}
+  {% if job_run.status == "pending" or job_run.status == "running" %}
+    <meta http-equiv="refresh" content="10">
+  {% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'pipeline:student_review_reports' %}">Отчеты на проверку</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Сохранение в PDF</li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block page_actions %}
+  {% if job_run %}
+    <a class="btn btn-outline-secondary" href="{% url 'job_run_detail' job_run.id %}">Открыть JobRun</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <section class="card mb-4">
+    <div class="card-body">
+      <p class="text-secondary">
+        PDF делается из DOCX-отчётов, которые уже лежат в Google Drive — журналы при этом
+        не читаются. Сначала соберите отчёты на странице
+        <a href="{% url 'pipeline:student_review_reports' %}">«Отчеты на проверку»</a>,
+        проверьте их, и только потом сохраняйте в PDF: уйдёт ровно то, что лежит в папке класса.
+      </p>
+
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        <div class="col-12 col-md-6 col-xl-4">
+          <label class="form-label" for="{{ form.module.id_for_label }}">{{ form.module.label }}</label>
+          {{ form.module }}
+          {{ form.module.errors }}
+          <div class="form-text">
+            Папка выбирается по классу: PDF 0-3 для 0–3 классов, PDF 4-11 для 4–11.
+            Внутри — папка модуля, в ней папка класса.
+          </div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">{{ form.class_links.label }}</label>
+          <div class="form-text mb-2">{{ form.class_links.help_text }}</div>
+          <div class="row row-cols-2 row-cols-md-4 row-cols-xl-6 g-1">
+            {% for choice in form.class_links %}
+              <div class="col">
+                <div class="form-check">
+                  {{ choice.tag }}
+                  <label class="form-check-label small" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          {{ form.class_links.errors }}
+        </div>
+        <div class="col-12">
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" type="submit" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Проверить, что готово</button>
+            <button class="btn btn-outline-primary" type="submit" name="save_pdf" value="1" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Сохранить в PDF</button>
+          </div>
+          <div class="form-text">
+            Проверка ничего не меняет — только смотрит, в каких классах есть собранные отчёты.
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  {% if job_run %}
+    {% if job_run.status == "pending" or job_run.status == "running" %}
+      <section class="alert alert-info shadow-sm" role="status">
+        {% if is_scan %}Проверка выполняется.{% else %}Сохранение в PDF выполняется.{% endif %}
+        Страница обновляется автоматически.
+      </section>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+      {% if is_scan %}
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Классов проверено</div><div class="display-6">{{ summary.classes_total }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Готовы к PDF</div><div class="display-6 text-success">{{ summary.classes_ready }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Нечего сохранять</div><div class="display-6 {% if summary.classes_not_ready %}text-warning{% endif %}">{{ summary.classes_not_ready }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">DOCX найдено</div><div class="display-6">{{ summary.docx_found }}</div></div></div></div>
+      {% else %}
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Классов всего</div><div class="display-6">{{ summary.classes_total }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Готово</div><div class="display-6">{{ summary.classes_done }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Пропущено</div><div class="display-6 {% if summary.classes_skipped %}text-warning{% endif %}">{{ summary.classes_skipped }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">PDF сохранено</div><div class="display-6">{{ summary.docx_created }}</div></div></div></div>
+      {% endif %}
+    </div>
+
+    <section class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">{% if is_scan %}Что лежит в папках{% else %}Результат по классам{% endif %}</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th style="width: 7rem;">Класс</th>
+                {% if is_scan %}
+                  <th style="width: 7rem;">DOCX</th>
+                  <th style="width: 7rem;">PDF</th>
+                {% else %}
+                  <th style="width: 9rem;">Статус</th>
+                  <th style="width: 7rem;">PDF</th>
+                {% endif %}
+                <th>Что это значит</th>
+                <th style="width: 8rem;">Папка</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  <td>{{ row.class_code }}</td>
+                  {% if is_scan %}
+                    <td>{{ row.docx }}</td>
+                    <td>{{ row.pdf }}</td>
+                    <td class="small {% if row.ready %}text-secondary{% else %}text-warning{% endif %}">{{ row.reason }}</td>
+                    <td>
+                      {% if row.docx_folder_url %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ row.docx_folder_url }}" target="_blank" rel="noopener">DOCX</a>
+                      {% endif %}
+                    </td>
+                  {% else %}
+                    <td>
+                      {% if row.status == "skipped" %}
+                        <span class="badge badge-soft badge-partial">пропущен</span>
+                      {% elif row.status == "success" %}
+                        <span class="badge badge-soft badge-success">готово</span>
+                      {% else %}
+                        <span class="badge badge-soft badge-failed">{{ row.status }}</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ row.docx_created|default:"—" }}</td>
+                    <td class="small text-secondary">{{ row.reason|default:"" }}</td>
+                    <td>
+                      {% if row.drive_folder_url %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ row.drive_folder_url }}" target="_blank" rel="noopener">Открыть</a>
+                      {% endif %}
+                    </td>
+                  {% endif %}
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-secondary">Ни одного класса.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

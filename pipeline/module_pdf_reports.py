@@ -31,7 +31,7 @@ from google_integration.pdf import docx_to_pdf
 from jobs.models import JobLog, JobRun
 from jobs.services import log_step
 from school_years.models import SchoolModule
-from school_years.report_folders import resolve_report_folder
+from school_years.report_folders import find_report_folder, resolve_report_folder
 from school_years.report_targets import docx_target_for_class
 
 from .module_review_reports import _class_links, _open_module_folder_to_the_school
@@ -152,20 +152,17 @@ def run_module_pdf_reports_job(
             )
             continue
 
+        # Look before building anything. Nothing is created until there is a report to
+        # convert, so pressing this button before the reports exist costs nothing and leaves
+        # no empty folders behind in either root.
         try:
-            source = resolve_report_folder(
+            source = find_report_folder(
                 drive,
                 root_folder_url=target.docx_folder_url,
                 module=module,
                 class_code=link.class_code,
             )
-            destination = resolve_report_folder(
-                drive,
-                root_folder_url=target.pdf_folder_url,
-                module=module,
-                class_code=link.class_code,
-            )
-            reports = _reports_in(drive, source.class_folder_id)
+            reports = _reports_in(drive, source.class_folder_id) if source else []
         except GoogleIntegrationError as exc:
             classes_skipped += 1
             rows.append(
@@ -174,16 +171,10 @@ def run_module_pdf_reports_job(
             log_step(
                 job_run=job_run,
                 level=JobLog.Level.ERROR,
-                message="Could not open the report folders",
+                message="Could not open the report folder",
                 context={"class_code": link.class_code, "reason": exc.technical_message},
             )
             continue
-
-        if destination.module_folder_id not in shared_folders:
-            shared_folders.add(destination.module_folder_id)
-            _open_module_folder_to_the_school(
-                drive, module, destination.module_folder_id, job_run=job_run
-            )
 
         if not reports:
             classes_skipped += 1
@@ -195,6 +186,32 @@ def run_module_pdf_reports_job(
                 }
             )
             continue
+
+        try:
+            destination = resolve_report_folder(
+                drive,
+                root_folder_url=target.pdf_folder_url,
+                module=module,
+                class_code=link.class_code,
+            )
+        except GoogleIntegrationError as exc:
+            classes_skipped += 1
+            rows.append(
+                {"class_code": link.class_code, "status": "skipped", "reason": exc.user_message}
+            )
+            log_step(
+                job_run=job_run,
+                level=JobLog.Level.ERROR,
+                message="Could not open the PDF folder",
+                context={"class_code": link.class_code, "reason": exc.technical_message},
+            )
+            continue
+
+        if destination.module_folder_id not in shared_folders:
+            shared_folders.add(destination.module_folder_id)
+            _open_module_folder_to_the_school(
+                drive, module, destination.module_folder_id, job_run=job_run
+            )
 
         created = 0
         failures: list[str] = []
