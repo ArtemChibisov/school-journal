@@ -20,6 +20,7 @@ JOB_TYPE_LABELS = {
     "download_descriptors": "Загрузка дескрипторов",
     "generate_docx_reports": "Генерация отчётов DOCX",
     "google_access_preflight": "Проверка доступов Google",
+    "module_review_reports": "Отчёты модуля на вычитку",
     "parent_report_send": "Отправка отчёта родителю",
     "prepare_student_review_reports": "Отчёты учеников на вычитку",
     "run_full_pipeline": "Полный пайплайн",

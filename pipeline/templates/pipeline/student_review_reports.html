@@ -25,27 +25,32 @@
 {% block content %}
   <section class="card mb-4">
     <div class="card-body">
-      <form method="post" class="row g-3 align-items-end">
+      <form method="post" class="row g-3">
         {% csrf_token %}
-        <div class="col-12 col-md-6 col-xl-3">
-          <label class="form-label" for="{{ form.class_sheet_link.id_for_label }}">{{ form.class_sheet_link.label }}</label>
-          {{ form.class_sheet_link }}
-          {{ form.class_sheet_link.errors }}
-        </div>
         <div class="col-12 col-md-6 col-xl-4">
-          <label class="form-label" for="{{ form.drive_folder_url.id_for_label }}">{{ form.drive_folder_url.label }}</label>
-          {{ form.drive_folder_url }}
-          {{ form.drive_folder_url.errors }}
+          <label class="form-label" for="{{ form.module.id_for_label }}">{{ form.module.label }}</label>
+          {{ form.module }}
+          {{ form.module.errors }}
+          <div class="form-text">
+            Даты, номер модуля и папку в Google Drive система возьмёт из
+            <a href="{% url 'school_years:module_registers' %}">настроек модуля</a>.
+            Папка выбирается по классу: 0–3 и 4–11 складываются отдельно.
+          </div>
         </div>
-        <div class="col-12 col-md-6 col-xl-2">
-          <label class="form-label" for="{{ form.module_number.id_for_label }}">{{ form.module_number.label }}</label>
-          {{ form.module_number }}
-          {{ form.module_number.errors }}
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-          <label class="form-label" for="{{ form.module_dates.id_for_label }}">{{ form.module_dates.label }}</label>
-          {{ form.module_dates }}
-          {{ form.module_dates.errors }}
+        <div class="col-12">
+          <label class="form-label">{{ form.class_links.label }}</label>
+          <div class="form-text mb-2">{{ form.class_links.help_text }}</div>
+          <div class="row row-cols-2 row-cols-md-4 row-cols-xl-6 g-1">
+            {% for choice in form.class_links %}
+              <div class="col">
+                <div class="form-check">
+                  {{ choice.tag }}
+                  <label class="form-check-label small" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          {{ form.class_links.errors }}
         </div>
         <div class="col-12">
           <button class="btn btn-primary" type="submit" {% if not perms.jobs.run_full_pipeline %}disabled{% endif %}>Сформировать DOCX-отчеты</button>

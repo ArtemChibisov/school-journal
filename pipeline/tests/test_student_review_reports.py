@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth.models import Permission, User
@@ -8,6 +9,8 @@ from django.urls import reverse
 
 from jobs.models import JobLog, JobRun
 from journal_links.models import ClassSheetLink
+from pipeline.module_review_reports import JOB_TYPE as MODULE_JOB_TYPE
+from school_years.models import ClassGroup, SchoolModule, SchoolYear
 from pipeline.services_upload import _upload_or_update_file_with_action, upload_docx_files_to_drive_folder
 from pipeline.student_review_reports import JOB_TYPE, run_prepare_student_review_reports_job
 
@@ -26,6 +29,9 @@ class StudentReviewReportsViewTests(TestCase):
         perms = Permission.objects.filter(codename__in=["view_jobrun", "run_full_pipeline"])
         self.user.user_permissions.add(*perms)
         self.client.force_login(self.user)
+        patcher = patch("pipeline.views.enqueue_module_review_reports_job")
+        self.mock_enqueue = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_page_shows_only_active_classes(self):
         ClassSheetLink.objects.create(
@@ -48,39 +54,94 @@ class StudentReviewReportsViewTests(TestCase):
 
         # Assert on the offered choices, not on the whole page: a class code as short as "5B"
         # collides with the random CSRF token often enough to make the test flaky.
-        offered = [str(link) for link in response.context["form"].fields["class_sheet_link"].queryset]
+        offered = [str(link) for link in response.context["form"].fields["class_links"].queryset]
         self.assertEqual(offered, ["4A — Math"])
 
-    @patch("pipeline.views.enqueue_prepare_student_review_reports_job")
-    def test_manual_post_creates_job_with_selected_params(self, mock_enqueue):
-        link = ClassSheetLink.objects.create(
-            class_code="4A",
-            subject_name="Math",
-            google_sheet_url=_sheet_url("active"),
-            is_active=True,
+    def _module(self, **overrides):
+        year = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.create(
+            name="26/27", is_active=True
         )
-        job_run = JobRun.objects.create(job_type=JOB_TYPE, status=JobRun.Status.PENDING)
-        mock_enqueue.return_value = job_run
+        fields = {
+            "school_year": year,
+            "number": SchoolModule.Number.MODULE_2,
+            "starts_on": date(2026, 9, 1),
+            "ends_on": date(2026, 10, 2),
+            "docx_folder_4_11_url": _drive_folder_url("folder123456789"),
+        }
+        fields.update(overrides)
+        return SchoolModule.objects.create(**fields)
+
+    def _class_group(self, class_code, grade_number, module):
+        return ClassGroup.objects.create(
+            school_year=module.school_year,
+            class_code=class_code,
+            grade_number=grade_number,
+            tutor_name="Тьютор",
+        )
+
+    def test_the_run_covers_the_chosen_module(self):
+        module = self._module()
+        self._class_group("4A", 4, module)
+        link = ClassSheetLink.objects.create(
+            class_code="4A", subject_name="Math", google_sheet_url=_sheet_url("active"), is_active=True
+        )
+        self.mock_enqueue.return_value = JobRun.objects.create(
+            job_type=MODULE_JOB_TYPE, status=JobRun.Status.PENDING
+        )
 
         response = self.client.post(
             reverse("pipeline:student_review_reports"),
-            {
-                "class_sheet_link": link.id,
-                "drive_folder_url": _drive_folder_url("folder123456789"),
-                "module_number": "2",
-                "module_dates": "1 сентября - 25 октября",
-            },
+            {"class_links": [link.id], "module": module.id},
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn(str(job_run.id), response["Location"])
-        mock_enqueue.assert_called_once()
-        kwargs = mock_enqueue.call_args.kwargs
-        self.assertEqual(kwargs["class_sheet_link_id"], link.id)
-        self.assertEqual(kwargs["drive_folder_url"], _drive_folder_url("folder123456789"))
-        self.assertEqual(kwargs["module_number"], 2)
-        self.assertEqual(kwargs["module_dates"], "1 сентября - 25 октября")
+        kwargs = self.mock_enqueue.call_args.kwargs
+        self.assertEqual(kwargs["module_id"], module.pk)
+        self.assertEqual(kwargs["class_codes"], ["4A"])
         self.assertEqual(kwargs["initiated_by"], self.user)
+
+    def test_several_classes_can_be_chosen(self):
+        module = self._module()
+        self._class_group("4A", 4, module)
+        self._class_group("5Б", 5, module)
+        first = ClassSheetLink.objects.create(
+            class_code="4A", subject_name="Math", google_sheet_url=_sheet_url("a"), is_active=True
+        )
+        second = ClassSheetLink.objects.create(
+            class_code="5Б", subject_name="Math", google_sheet_url=_sheet_url("b"), is_active=True
+        )
+        self.mock_enqueue.return_value = JobRun.objects.create(
+            job_type=MODULE_JOB_TYPE, status=JobRun.Status.PENDING
+        )
+
+        self.client.post(
+            reverse("pipeline:student_review_reports"),
+            {"class_links": [first.id, second.id], "module": module.id},
+        )
+
+        self.assertEqual(self.mock_enqueue.call_args.kwargs["class_codes"], ["4A", "5Б"])
+
+    def test_choosing_nothing_means_every_class(self):
+        module = self._module()
+        self.mock_enqueue.return_value = JobRun.objects.create(
+            job_type=MODULE_JOB_TYPE, status=JobRun.Status.PENDING
+        )
+
+        self.client.post(
+            reverse("pipeline:student_review_reports"), {"module": module.id}
+        )
+
+        self.assertIsNone(self.mock_enqueue.call_args.kwargs["class_codes"])
+
+    def test_the_module_is_required(self):
+        self.mock_enqueue.return_value = JobRun.objects.create(
+            job_type=MODULE_JOB_TYPE, status=JobRun.Status.PENDING
+        )
+
+        response = self.client.post(reverse("pipeline:student_review_reports"), {})
+
+        self.assertEqual(response.status_code, 200)
+        self.mock_enqueue.assert_not_called()
 
 
 class FakeDocxGenerator:

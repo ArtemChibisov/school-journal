@@ -2,6 +2,7 @@ from django import forms
 
 from journal_links.forms import validate_google_sheet_url
 from journal_links.models import ClassSheetLink
+from school_years.models import SchoolModule, SchoolYear
 from pipeline.models import AICriteriaReportTarget, ParentContact, ValidCriterionTemplate
 from pipeline.services_upload import extract_drive_folder_id, ReviewUploadError
 
@@ -83,33 +84,44 @@ class AICriteriaReportTargetForm(forms.ModelForm):
 
 
 class StudentReviewReportsForm(forms.Form):
-    class_sheet_link = forms.ModelChoiceField(
+    """Which class, for which module. Everything else the module already knows.
+
+    The dates, the number and the Drive folder used to be typed in by hand on every run, which
+    is thirty-two chances to mistype what is already stored.
+    """
+
+    module = forms.ModelChoiceField(
+        queryset=SchoolModule.objects.none(),
+        label="Модуль",
+        empty_label=None,
+    )
+    # Nothing ticked means every class, which is the usual run. Ticking a few is for going
+    # back to the ones that failed without redoing the rest.
+    class_links = forms.ModelMultipleChoiceField(
         queryset=ClassSheetLink.objects.none(),
-        label="Класс",
-        empty_label="Выберите активный класс",
-    )
-    drive_folder_url = forms.CharField(
-        label="Ссылка на Google Drive папку",
-        max_length=500,
-        widget=forms.TextInput(attrs={"placeholder": "https://drive.google.com/drive/folders/..."}),
-    )
-    module_number = forms.IntegerField(label="Номер модуля", min_value=1)
-    module_dates = forms.CharField(
-        label="Даты модуля",
-        max_length=255,
-        widget=forms.TextInput(attrs={"placeholder": "например: 1 сентября - 25 октября"}),
+        label="Классы",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Ничего не отмечено — значит все классы",
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["class_sheet_link"].queryset = ClassSheetLink.objects.filter(is_active=True).order_by("class_code", "id")
-        for field_name in ["class_sheet_link", "drive_folder_url", "module_number", "module_dates"]:
-            self.fields[field_name].widget.attrs.setdefault("class", "form-control" if field_name != "class_sheet_link" else "form-select")
+        self.fields["class_links"].queryset = ClassSheetLink.objects.filter(
+            is_active=True
+        ).order_by("class_code", "id")
 
-    def clean_drive_folder_url(self):
-        value = (self.cleaned_data.get("drive_folder_url") or "").strip()
-        try:
-            extract_drive_folder_id(value)
-        except ReviewUploadError as exc:
-            raise forms.ValidationError(str(exc)) from exc
-        return value
+        school_year = SchoolYear.objects.filter(is_active=True).first() or SchoolYear.objects.first()
+        modules = (
+            SchoolModule.objects.filter(school_year=school_year).order_by("number")
+            if school_year
+            else SchoolModule.objects.none()
+        )
+        self.fields["module"].queryset = modules
+        if not self.is_bound:
+            self.fields["module"].initial = modules.first()
+
+        self.fields["module"].widget.attrs.setdefault("class", "form-select")
+        self.fields["class_links"].widget.attrs.setdefault("class", "form-check-input")
+
+

@@ -23,6 +23,10 @@ from pipeline.forms import (
 from pipeline.models import AICriteriaReportTarget, CriterionEntry, CriterionReviewEvent, ParentContact, ValidCriterionTemplate
 from pipeline.parent_contacts import import_parent_contacts_csv
 from pipeline.student_review_reports import JOB_TYPE as STUDENT_REVIEW_REPORTS_JOB_TYPE, enqueue_prepare_student_review_reports_job
+from pipeline.module_review_reports import (
+    JOB_TYPE as MODULE_REVIEW_REPORTS_JOB_TYPE,
+    enqueue_module_review_reports_job,
+)
 
 
 def _parse_non_empty(value: str | None) -> str | None:
@@ -227,22 +231,30 @@ def student_review_reports(request):
             return HttpResponse("forbidden", status=403)
         form = StudentReviewReportsForm(request.POST)
         if form.is_valid():
-            link = form.cleaned_data["class_sheet_link"]
-            job_run = enqueue_prepare_student_review_reports_job(
-                class_sheet_link_id=link.id,
-                drive_folder_url=form.cleaned_data["drive_folder_url"],
-                module_number=form.cleaned_data["module_number"],
-                module_dates=form.cleaned_data["module_dates"],
+            module = form.cleaned_data["module"]
+            links = list(form.cleaned_data.get("class_links") or [])
+            class_codes = [link.class_code for link in links]
+            job_run = enqueue_module_review_reports_job(
+                module_id=module.pk,
+                class_codes=class_codes or None,
                 initiated_by=request.user if request.user.is_authenticated else None,
             )
-            messages.success(request, "Подготовка DOCX-отчетов запущена.")
+            scope = ", ".join(class_codes) if class_codes else "все классы"
+            messages.success(
+                request,
+                f"Подготовка DOCX-отчётов запущена: {module.get_number_display()}, {scope}.",
+            )
             return redirect(f"{reverse('pipeline:student_review_reports')}?run_id={job_run.id}")
     else:
         form = StudentReviewReportsForm()
 
     requested_run_id = _parse_non_empty(request.GET.get("run_id"))
     if requested_run_id:
-        job_run = get_object_or_404(JobRun, id=requested_run_id, job_type=STUDENT_REVIEW_REPORTS_JOB_TYPE)
+        job_run = get_object_or_404(
+            JobRun,
+            id=requested_run_id,
+            job_type__in=[MODULE_REVIEW_REPORTS_JOB_TYPE, STUDENT_REVIEW_REPORTS_JOB_TYPE],
+        )
     else:
         job_run = _latest_student_review_reports_run()
 
