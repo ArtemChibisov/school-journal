@@ -6,6 +6,7 @@ from school_years.models import ClassGroup, SchoolModule, SchoolYear
 from school_years.report_targets import (
     docx_target_for_class,
     format_module_dates,
+    format_school_year,
     is_primary_grade,
     module_number_for_reports,
 )
@@ -15,18 +16,34 @@ SENIOR_FOLDER = "https://drive.google.com/drive/folders/senior4114114114"
 
 
 class FormatModuleDatesTests(SimpleTestCase):
-    def test_the_header_reads_the_way_it_always_has(self):
+    def test_the_header_reads_the_way_the_printed_report_does(self):
         module = SchoolModule(starts_on=date(2026, 9, 1), ends_on=date(2026, 10, 2))
 
-        self.assertEqual(format_module_dates(module), "1 сентября - 2 октября")
+        self.assertEqual(format_module_dates(module), "01.09 – 02.10.2026")
 
     def test_a_module_inside_one_month(self):
         module = SchoolModule(starts_on=date(2026, 3, 3), ends_on=date(2026, 3, 28))
 
-        self.assertEqual(format_module_dates(module), "3 марта - 28 марта")
+        self.assertEqual(format_module_dates(module), "03.03 – 28.03.2026")
+
+    def test_a_module_across_new_year_names_both_years(self):
+        module = SchoolModule(starts_on=date(2026, 12, 29), ends_on=date(2027, 2, 13))
+
+        self.assertEqual(format_module_dates(module), "29.12.2026 – 13.02.2027")
 
     def test_without_dates_there_is_nothing_to_print(self):
         self.assertEqual(format_module_dates(SchoolModule()), "")
+
+
+class FormatSchoolYearTests(SimpleTestCase):
+    def test_the_shorthand_the_settings_hold_is_spelled_out(self):
+        for name in ("26/27", "2026/2027", "2026-2027", "26 - 27"):
+            self.assertEqual(format_school_year(SchoolYear(name=name)), "2026-2027", name)
+
+    def test_a_name_we_did_not_foresee_is_printed_as_given(self):
+        self.assertEqual(
+            format_school_year(SchoolYear(name="2026-2027 уч.год")), "2026-2027 уч.год"
+        )
 
 
 class ModuleNumberTests(SimpleTestCase):
@@ -80,7 +97,8 @@ class DocxTargetTests(TestCase):
         self.assertTrue(target.is_ready)
         self.assertEqual(target.docx_folder_url, SENIOR_FOLDER)
         self.assertEqual(target.module_number, 1)
-        self.assertEqual(target.module_dates, "1 сентября - 2 октября")
+        self.assertEqual(target.module_dates, "01.09 – 02.10.2026")
+        self.assertEqual(target.school_year, "2026-2027")
         self.assertFalse(target.is_primary)
 
     def test_a_junior_class_goes_to_the_junior_folder(self):

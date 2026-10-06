@@ -7,24 +7,45 @@ knows, and to get it wrong on one of thirty-two runs.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from .models import ClassGroup, SchoolModule
-
-MONTHS_GENITIVE = (
-    "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря",
-)
+from .models import ClassGroup, SchoolModule, SchoolYear
 
 
 def format_module_dates(module: SchoolModule) -> str:
-    """`1 сентября - 2 октября`, the shape the report header has always used."""
+    """`12.01 – 13.02.2026`, the shape printed on the report's first page.
+
+    The year is given once, at the end, the way the school writes it. A module that runs
+    across New Year gets it twice, because `29.12 – 13.02.2026` would read as one winter.
+    """
 
     if not module.starts_on or not module.ends_on:
         return ""
-    start = f"{module.starts_on.day} {MONTHS_GENITIVE[module.starts_on.month - 1]}"
-    end = f"{module.ends_on.day} {MONTHS_GENITIVE[module.ends_on.month - 1]}"
-    return f"{start} - {end}"
+    start, end = module.starts_on, module.ends_on
+    head = f"{start.day:02d}.{start.month:02d}"
+    if start.year != end.year:
+        head = f"{head}.{start.year}"
+    return f"{head} – {end.day:02d}.{end.month:02d}.{end.year}"
+
+
+YEAR_SHORTHAND = re.compile(r"^(\d{2}|\d{4})\s*[/–—-]\s*(\d{2}|\d{4})$")
+
+
+def format_school_year(school_year: SchoolYear) -> str:
+    """`2025-2026` for the header, whichever shorthand the year was named with.
+
+    `25/26`, `2025/2026` and `2025-2026` all name the same year, and which one someone typed
+    into the settings should not decide what parents read. Anything else is printed as given:
+    a school that names its year something we did not foresee means it that way.
+    """
+
+    name = (school_year.name or "").strip()
+    match = YEAR_SHORTHAND.match(name)
+    if not match:
+        return name
+    first, second = (int(part) for part in match.groups())
+    return f"{first + 2000 if first < 100 else first}-{second + 2000 if second < 100 else second}"
 
 
 def module_number_for_reports(module: SchoolModule) -> int | None:
@@ -45,6 +66,7 @@ class ReportTarget:
     module: SchoolModule
     module_number: int | None
     module_dates: str
+    school_year: str
     docx_folder_url: str
     is_primary: bool
     missing: str = ""
@@ -93,6 +115,7 @@ def docx_target_for_class(module: SchoolModule, class_code: str) -> ReportTarget
         module=module,
         module_number=module_number_for_reports(module),
         module_dates=format_module_dates(module),
+        school_year=format_school_year(module.school_year),
         docx_folder_url=folder,
         is_primary=primary,
         missing=missing,

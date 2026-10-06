@@ -56,6 +56,7 @@ def _params(
     drive_folder_id: str,
     module_number: int,
     module_dates: str,
+    school_year: str,
 ) -> dict[str, Any]:
     return {
         "class_code": link.class_code,
@@ -64,6 +65,7 @@ def _params(
         "drive_folder_id": drive_folder_id,
         "module_number": module_number,
         "module_dates": module_dates,
+        "school_year": school_year,
         "output_format": "docx",
         "trigger": "manual",
     }
@@ -75,6 +77,7 @@ def enqueue_prepare_student_review_reports_job(
     drive_folder_url: str,
     module_number: int,
     module_dates: str,
+    school_year: str = "",
     initiated_by=None,
 ) -> JobRun:
     link = ClassSheetLink.objects.get(id=class_sheet_link_id, is_active=True)
@@ -85,6 +88,7 @@ def enqueue_prepare_student_review_reports_job(
         drive_folder_id=drive_folder_id,
         module_number=module_number,
         module_dates=module_dates,
+        school_year=school_year,
     )
     job_run = JobRun.objects.create(
         job_type=JOB_TYPE,
@@ -113,6 +117,7 @@ def _run_prepare_student_review_reports_thread(job_run_id: str) -> None:
             drive_folder_url=str(params["drive_folder_url"]),
             module_number=int(params["module_number"]),
             module_dates=str(params.get("module_dates") or ""),
+            school_year=str(params.get("school_year") or ""),
             initiated_by=job_run.initiated_by,
             job_run=job_run,
         )
@@ -136,6 +141,7 @@ def run_prepare_student_review_reports_job(
     drive_folder_url: str,
     module_number: int,
     module_dates: str,
+    school_year: str = "",
     initiated_by=None,
     job_run: JobRun | None = None,
     generator: LegacyDocxGenerator | None = None,
@@ -148,6 +154,7 @@ def run_prepare_student_review_reports_job(
         drive_folder_id=drive_folder_id,
         module_number=module_number,
         module_dates=module_dates,
+        school_year=school_year,
     )
 
     if job_run is None:
@@ -205,6 +212,7 @@ def run_prepare_student_review_reports_job(
             temp_dir=generation_temp_dir,
             module_number=module_number,
             module_dates=module_dates,
+            school_year=school_year,
             school_level=school_level,
             include_tutor=include_tutor,
         )
@@ -253,6 +261,7 @@ def run_prepare_student_review_reports_job(
             "drive_folder_id": drive_folder_id,
             "module_number": module_number,
             "module_dates": module_dates,
+            "school_year": school_year,
             "school_level": school_level,
             "include_tutor": include_tutor,
             "files": docx_entries,
@@ -281,6 +290,7 @@ def run_prepare_student_review_reports_job(
             "drive_folder_id": drive_folder_id,
             "module_number": module_number,
             "module_dates": module_dates,
+            "school_year": school_year,
             "files": docx_entries,
             "uploaded_files": upload_result.get("uploaded_files", []),
             "errors": errors,

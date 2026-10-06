@@ -118,13 +118,16 @@ class ModuleReviewReportsTests(TestCase):
         ]
         self.assertEqual(len(class_folders), 1)
 
-    def test_the_module_supplies_the_number_and_the_dates(self):
+    def test_the_module_supplies_the_number_the_dates_and_the_year(self):
+        """Everything the first page prints - none of it typed into a form."""
+
         self._class("7А", 7)
 
         self._run()
 
         self.assertEqual(self.calls[0]["module_number"], 1)
-        self.assertEqual(self.calls[0]["module_dates"], "1 сентября - 2 октября")
+        self.assertEqual(self.calls[0]["module_dates"], "01.09 – 02.10.2026")
+        self.assertEqual(self.calls[0]["school_year"], "2026-2027")
 
     def test_only_the_chosen_classes_are_built(self):
         self._class("2А", 2)

@@ -181,6 +181,7 @@ class FakeDocxGenerator:
         temp_dir,
         module_number,
         module_dates,
+        school_year,
         school_level,
         include_tutor,
     ):
@@ -193,6 +194,7 @@ class FakeDocxGenerator:
                 "temp_dir": str(temp_dir),
                 "module_number": module_number,
                 "module_dates": module_dates,
+                "school_year": school_year,
                 "school_level": school_level,
                 "include_tutor": include_tutor,
             }
@@ -243,7 +245,8 @@ class StudentReviewReportsJobTests(TestCase):
                     class_sheet_link_id=link.id,
                     drive_folder_url=_drive_folder_url("folder123456789"),
                     module_number=2,
-                    module_dates="1 сентября - 25 октября",
+                    module_dates="01.09 – 25.10.2026",
+                    school_year="2026-2027",
                     generator=FakeDocxGenerator(capture),
                 )
                 upload_kwargs = mock_upload.call_args.kwargs
@@ -259,7 +262,8 @@ class StudentReviewReportsJobTests(TestCase):
         self.assertEqual(job.params_json["class_code"], "4A")
         self.assertEqual(job.params_json["drive_folder_id"], "folder123456789")
         self.assertEqual(job.params_json["module_number"], 2)
-        self.assertEqual(job.params_json["module_dates"], "1 сентября - 25 октября")
+        self.assertEqual(job.params_json["module_dates"], "01.09 – 25.10.2026")
+        self.assertEqual(job.params_json["school_year"], "2026-2027")
         self.assertEqual(job.params_json["output_format"], "docx")
         self.assertEqual(job.params_json["trigger"], "manual")
         self.assertEqual(job.result_json["summary"]["students_found"], 1)
@@ -268,7 +272,8 @@ class StudentReviewReportsJobTests(TestCase):
         self.assertTrue(job.result_json["local_temp_removed"])
         self.assertFalse(output_dir.exists())
         self.assertEqual(capture["module_number"], 2)
-        self.assertEqual(capture["module_dates"], "1 сентября - 25 октября")
+        self.assertEqual(capture["module_dates"], "01.09 – 25.10.2026")
+        self.assertEqual(capture["school_year"], "2026-2027")
         self.assertEqual(upload_kwargs["folder_id"], "folder123456789")
         self.assertEqual(upload_kwargs["duplicate_strategy"], "update")
         self.assertEqual(upload_kwargs["docx_files"][0]["name"], "4A John Doe.docx")

@@ -252,6 +252,7 @@ def fill_header(
     *,
     module_number=None,
     module_dates="",
+    school_year="",
     include_tutor=True,
 ) -> list:
     """
@@ -338,6 +339,7 @@ def fill_header(
             "AssistantPrincipal": ap,
             "ModuleNumber": module_number or "",
             "ModuleDates": module_dates or "",
+            "SchoolYear": school_year or "",
             "TutorName": tutor_name or "",
             "TutorText": tutor_text_final or "",
             "HasTutor": bool(tutor_text_final),

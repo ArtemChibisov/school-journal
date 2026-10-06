@@ -166,6 +166,7 @@ def run_module_review_reports_job(
             drive_folder_url=folder_url(class_folder_id),
             module_number=target.module_number,
             module_dates=target.module_dates,
+            school_year=target.school_year,
             initiated_by=initiated_by,
             generator=generator,
         )
