@@ -141,6 +141,24 @@ class ParentReportsTests(TestCase):
         self.assertEqual(len(waiting), 1)
         self.assertEqual(waiting[0]["problem"], "нет PDF-отчёта")
 
+    def test_a_report_named_with_a_double_space_still_finds_the_family(self):
+        """`1А Даниил  Надточий.pdf` is the same child as the contact `Даниил Надточий`."""
+
+        self._class("2А", 2)
+        self._pdf("2А", "Даниил  Надточий")
+        self._contact("2А", "Даниил Надточий", "mum@mail.ru")
+
+        job_run = self._check()
+        students = job_run.result_json["classes"][0]["students"]
+
+        self.assertEqual(len(students), 1)
+        self.assertEqual(students[0]["emails"], ["mum@mail.ru"])
+        self.assertEqual(students[0]["problem"], "")
+        self.assertEqual(job_run.result_json["summary"]["students_total"], 1)
+
+        self._send()
+        self.assertEqual([m.to[0] for m in mail.outbox], ["mum@mail.ru"])
+
     def test_a_class_without_a_pdf_folder_says_what_to_do(self):
         self._class("2А", 2)
 
