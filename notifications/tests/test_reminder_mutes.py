@@ -180,7 +180,9 @@ class ReminderSendingTests(MuteTestCase):
         self.assertEqual(job.result_json["summary"]["sent"], 1)
         self.assertEqual(job.result_json["summary"]["skipped_muted"], 1)
         self.assertEqual(send.call_count, 1)
-        self.assertNotIn("111", str(send.call_args_list))
+        # Compare the chat ids themselves: the call also carries the run's random UUID, which
+        # contains "111" often enough to fail a substring check now and then.
+        self.assertEqual([call.args[0] for call in send.call_args_list], ["222"])
 
     def test_unmuting_puts_the_teacher_back(self):
         set_muted(module=self.module, teacher=self.mikheev, muted=True)

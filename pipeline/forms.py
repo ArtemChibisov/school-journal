@@ -125,6 +125,15 @@ class ParentLetterForm(forms.ModelForm):
         return cleaned
 
 
+class _PickedStudentsField(forms.Field):
+    """The ticked rows of the table under the form, one `class|student` per row."""
+
+    widget = forms.MultipleHiddenInput
+
+    def to_python(self, value):
+        return [str(item).strip() for item in value or [] if "|" in str(item)]
+
+
 class ParentReportsForm(forms.Form):
     """Who the run covers, and how carefully.
 
@@ -160,6 +169,7 @@ class ParentReportsForm(forms.Form):
         required=False,
         help_text="Письма уйдут сюда вместо родителей — так проверяют на настоящем классе",
     )
+    students = _PickedStudentsField(required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

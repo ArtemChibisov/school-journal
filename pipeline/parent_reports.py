@@ -62,6 +62,51 @@ def class_codes_for(
     return codes
 
 
+def _chosen(students: list[str] | None) -> dict[str, set[str]]:
+    """`["4А|Мария Иванова"]` -> `{"4а": {"мария иванова"}}`: the students a run is narrowed to.
+
+    Each entry is one ticked row of the table on the page. Picking students is how the families
+    left out of a class run - no address yet, no PDF yet - are written to later without writing
+    to the rest of the class again.
+    """
+
+    chosen: dict[str, set[str]] = {}
+    for item in students or []:
+        class_code, _, student = str(item).partition("|")
+        if class_code.strip() and student.strip():
+            chosen.setdefault(class_code.strip().casefold(), set()).add(student.strip().casefold())
+    return chosen
+
+
+def _codes_for_run(
+    module: SchoolModule,
+    *,
+    class_codes: list[str] | None,
+    parallels: list[int] | None,
+    chosen: dict[str, set[str]],
+) -> list[str]:
+    # Picked students bring their own classes; the class and parallel boxes do not narrow them.
+    if chosen:
+        return class_codes_for(module, class_codes=list(chosen), parallels=None)
+    return class_codes_for(module, class_codes=class_codes, parallels=parallels)
+
+
+def _only_chosen(rows: list[dict], chosen: dict[str, set[str]]) -> list[dict]:
+    if not chosen:
+        return rows
+    return [
+        {
+            **row,
+            "students": [
+                student
+                for student in row["students"]
+                if student["student"].casefold() in chosen.get(row["class_code"].casefold(), set())
+            ],
+        }
+        for row in rows
+    ]
+
+
 def _student_of(pdf_name: str, class_code: str) -> str:
     """`4А Мария Иванова.pdf` -> `Мария Иванова`, the way the report was named."""
 
@@ -247,25 +292,34 @@ def run_parent_reports_send(
     parallels: list[int] | None = None,
     resend: bool = False,
     test_address: str = "",
+    students: list[str] | None = None,
     job_run: JobRun | None = None,
     initiated_by=None,
     drive=None,
 ) -> JobRun:
     """Send one letter per address, pausing between them.
 
-    `test_address` redirects every letter to one mailbox. It is how a run is tried on a real
-    class with real reports without anything reaching a family.
+    `test_address` redirects the letters to one mailbox. It is how a run is tried on a real
+    class with real reports without anything reaching a family. Both parents of a child get the
+    same letter, so the test mailbox gets it once per child rather than once per parent.
+
+    `students` narrows the run to the ticked rows of the table, as `class|student` entries.
     """
 
-    codes = class_codes_for(module, class_codes=class_codes, parallels=parallels)
+    chosen = _chosen(students)
+    codes = _codes_for_run(module, class_codes=class_codes, parallels=parallels, chosen=chosen)
     job_run = job_run or _start(
-        JOB_TYPE_SEND, module, codes, initiated_by, {"resend": resend, "test_address": test_address}
+        JOB_TYPE_SEND,
+        module,
+        codes,
+        initiated_by,
+        {"resend": resend, "test_address": test_address, "students": list(students or [])},
     )
     drive = drive or _drive()
     template = stored_template()
     pause = float(getattr(settings, "EMAIL_SEND_PAUSE_SECONDS", 0) or 0)
 
-    rows = _walk(drive, module, codes, job_run=job_run)
+    rows = _only_chosen(_walk(drive, module, codes, job_run=job_run), chosen)
     sent = failed = skipped = 0
 
     for row in rows:
@@ -335,8 +389,12 @@ def run_parent_reports_send(
                 )
                 if pause:
                     time.sleep(pause)
+                if test_address:
+                    break
 
     summary = {**_summary(rows), "sent": sent, "failed": failed, "skipped_already_sent": skipped}
+    if test_address:
+        summary["letters"] = summary["ready"]
     log_step(job_run=job_run, level=JobLog.Level.INFO, message="Parent reports send finished", context=summary)
     return _finish(
         job_run,
@@ -354,8 +412,12 @@ def enqueue(job_type: str, **kwargs) -> JobRun:
     """Start a run in the background, the way the other long jobs are started."""
 
     module = kwargs["module"]
-    codes = class_codes_for(
-        module, class_codes=kwargs.get("class_codes"), parallels=kwargs.get("parallels")
+    students = list(kwargs.get("students") or [])
+    codes = _codes_for_run(
+        module,
+        class_codes=kwargs.get("class_codes"),
+        parallels=kwargs.get("parallels"),
+        chosen=_chosen(students),
     )
     job_run = JobRun.objects.create(
         job_type=job_type,
@@ -367,6 +429,7 @@ def enqueue(job_type: str, **kwargs) -> JobRun:
             "class_codes": codes,
             "resend": kwargs.get("resend", False),
             "test_address": kwargs.get("test_address", ""),
+            "students": students,
         },
         initiated_by=kwargs.get("initiated_by"),
     )
@@ -387,6 +450,7 @@ def _run_in_thread(job_type: str, job_run_id: str) -> None:
             else {
                 "resend": bool(params.get("resend")),
                 "test_address": str(params.get("test_address") or ""),
+                "students": list(params.get("students") or []),
             }
         )
         runner(

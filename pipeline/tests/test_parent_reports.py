@@ -1,7 +1,10 @@
 from datetime import date
+from unittest.mock import patch
 
+from django.contrib.auth.models import Permission, User
 from django.core import mail
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from google_integration.drive import MIME_PDF
 from google_integration.fakes import FakeDriveClient
@@ -11,7 +14,9 @@ from pipeline.models import ParentContact
 from pipeline.parent_reports import (
     JOB_TYPE_CHECK,
     JOB_TYPE_SEND,
+    _run_in_thread,
     class_codes_for,
+    enqueue,
     run_parent_reports_check,
     run_parent_reports_send,
 )
@@ -189,14 +194,89 @@ class ParentReportsTests(TestCase):
 
         self.assertEqual(len(mail.outbox), 1)
 
-    def test_a_test_address_takes_every_letter_instead_of_the_families(self):
+    def test_a_test_address_takes_the_letters_instead_of_the_families(self):
         self._class("2А", 2)
-        self._pdf("2А", "Мария Иванова")
-        self._contact("2А", "Мария Иванова", "dad@mail.ru", "mum@mail.ru")
+        for student in ("Анна Белова", "Мария Иванова"):
+            self._pdf("2А", student)
+            self._contact("2А", student, f"{student.split()[0].lower()}@mail.ru")
 
         self._send(test_address="me@school.ge")
 
         self.assertEqual([m.to[0] for m in mail.outbox], ["me@school.ge", "me@school.ge"])
+
+    def test_a_test_mailbox_gets_one_letter_per_child_not_one_per_parent(self):
+        """Both parents get the same letter; two copies in one mailbox only fill it up."""
+
+        self._class("2А", 2)
+        self._pdf("2А", "Мария Иванова")
+        self._contact("2А", "Мария Иванова", "dad@mail.ru", "mum@mail.ru")
+
+        job_run = self._send(test_address="me@school.ge")
+
+        self.assertEqual([m.to[0] for m in mail.outbox], ["me@school.ge"])
+        self.assertEqual(job_run.result_json["summary"]["sent"], 1)
+        self.assertEqual(job_run.result_json["summary"]["letters"], 1)
+
+    # -- sending to the students picked in the table --------------------------------------
+
+    def test_only_the_picked_students_are_written_to(self):
+        self._class("2А", 2)
+        for student in ("Анна Белова", "Мария Иванова", "Пётр Быков"):
+            self._pdf("2А", student)
+            self._contact("2А", student, f"{student.split()[0].lower()}@mail.ru")
+
+        job_run = self._send(students=["2А|Мария Иванова"])
+
+        self.assertEqual([m.to[0] for m in mail.outbox], ["мария@mail.ru"])
+        self.assertEqual(
+            [s["student"] for s in job_run.result_json["classes"][0]["students"]], ["Мария Иванова"]
+        )
+        self.assertEqual(job_run.params_json["students"], ["2А|Мария Иванова"])
+
+    def test_picked_students_bring_their_own_classes(self):
+        """The class boxes do not narrow a pick: the students named are the whole run."""
+
+        self._class("2А", 2)
+        self._class("7А", 7)
+        self._pdf("2А", "Мария Иванова")
+        self._pdf("7А", "Пётр Быков", root=self.senior_pdf_root)
+        self._contact("2А", "Мария Иванова", "junior@mail.ru")
+        self._contact("7А", "Пётр Быков", "senior@mail.ru")
+
+        job_run = self._send(students=["2А|Мария Иванова", "7А|Пётр Быков"], class_codes=["2А"])
+
+        self.assertEqual(sorted(m.to[0] for m in mail.outbox), ["junior@mail.ru", "senior@mail.ru"])
+        self.assertEqual(job_run.params_json["class_codes"], ["2А", "7А"])
+
+    def test_a_picked_family_already_written_to_is_still_skipped_without_resend(self):
+        self._class("2А", 2)
+        self._pdf("2А", "Мария Иванова")
+        self._contact("2А", "Мария Иванова", "mum@mail.ru")
+
+        self._send()
+        mail.outbox.clear()
+        self._send(students=["2А|Мария Иванова"])
+        self.assertEqual(mail.outbox, [])
+
+        self._send(students=["2А|Мария Иванова"], resend=True)
+        self.assertEqual([m.to[0] for m in mail.outbox], ["mum@mail.ru"])
+
+    def test_a_pick_reaches_the_background_run(self):
+        self._class("2А", 2)
+        self._pdf("2А", "Анна Белова")
+        self._pdf("2А", "Мария Иванова")
+        self._contact("2А", "Анна Белова", "anna@mail.ru")
+        self._contact("2А", "Мария Иванова", "maria@mail.ru")
+
+        with patch("pipeline.parent_reports.threading.Thread") as thread, patch(
+            "pipeline.parent_reports._drive", return_value=self.drive
+        ), patch("pipeline.parent_reports.close_old_connections"):
+            job_run = enqueue(JOB_TYPE_SEND, module=self.module, students=["2А|Анна Белова"])
+            _run_in_thread(*thread.call_args.kwargs["args"])
+
+        job_run.refresh_from_db()
+        self.assertEqual(job_run.params_json["class_codes"], ["2А"])
+        self.assertEqual([m.to[0] for m in mail.outbox], ["anna@mail.ru"])
 
     def test_a_test_run_does_not_count_as_having_written_to_the_family(self):
         """Otherwise the real run would skip everyone it had only pretended to write to."""
@@ -249,3 +329,92 @@ class ParentReportsTests(TestCase):
         self.assertEqual(
             sorted(m.to[0] for m in mail.outbox), ["junior@mail.ru", "senior@mail.ru"]
         )
+
+
+class ParentReportsPageTests(TestCase):
+    def setUp(self):
+        self.year = SchoolYear.objects.create(name="26/27", is_active=True)
+        self.module = SchoolModule.objects.create(
+            school_year=self.year,
+            number=SchoolModule.Number.MODULE_1,
+            starts_on=date(2026, 9, 1),
+            ends_on=date(2026, 10, 2),
+        )
+        ClassGroup.objects.create(
+            school_year=self.year, class_code="2А", grade_number=2, tutor_name="Тьютор"
+        )
+        self.user = User.objects.create_user(username="sender", password="p")
+        for codename in ("view_jobrun", "run_full_pipeline"):
+            self.user.user_permissions.add(Permission.objects.get(codename=codename))
+        self.client.force_login(self.user)
+        self.url = reverse("pipeline:parent_reports")
+
+        self.started: list[tuple[str, dict]] = []
+        patcher = patch("pipeline.parent_reports.enqueue", side_effect=self._enqueue)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _enqueue(self, job_type, **kwargs):
+        self.started.append((job_type, kwargs))
+        return JobRun.objects.create(job_type=job_type, status=JobRun.Status.PENDING)
+
+    def _checked_class(self):
+        return JobRun.objects.create(
+            job_type=JOB_TYPE_CHECK,
+            status=JobRun.Status.SUCCESS,
+            result_json={
+                "summary": {},
+                "classes": [
+                    {
+                        "class_code": "2А",
+                        "reason": "",
+                        "students": [
+                            {"student": "Анна Белова", "file_id": "f1", "file_name": "2А Анна Белова.pdf",
+                             "emails": ["anna@mail.ru"], "sent": ["anna@mail.ru"], "problem": ""},
+                            {"student": "Мария Иванова", "file_id": "f2", "file_name": "2А Мария Иванова.pdf",
+                             "emails": ["maria@mail.ru"], "sent": [], "problem": ""},
+                            {"student": "Егор Белышев", "file_id": "f3", "file_name": "2А Егор Белышев.pdf",
+                             "emails": [], "sent": [], "problem": "нет адреса родителей"},
+                        ],
+                    }
+                ],
+            },
+        )
+
+    def test_rows_that_can_be_sent_have_a_tick_box(self):
+        job_run = self._checked_class()
+
+        response = self.client.get(self.url, {"run_id": job_run.id})
+
+        self.assertContains(response, 'value="2А|Мария Иванова"')
+        self.assertContains(response, 'value="2А|Анна Белова"')
+        self.assertNotContains(response, 'value="2А|Егор Белышев"')
+        self.assertContains(response, "Отправить отмеченным")
+
+    def test_sending_to_the_ticked_rows_starts_a_send_for_them_only(self):
+        response = self.client.post(
+            self.url,
+            {"module": self.module.pk, "send_selected": "1", "students": ["2А|Мария Иванова"]},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(self.started), 1)
+        job_type, kwargs = self.started[0]
+        self.assertEqual(job_type, JOB_TYPE_SEND)
+        self.assertEqual(kwargs["students"], ["2А|Мария Иванова"])
+
+    def test_nothing_ticked_sends_nothing(self):
+        response = self.client.post(self.url, {"module": self.module.pk, "send_selected": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.started, [])
+        self.assertContains(response, "Отметьте в таблице учеников")
+
+    def test_the_class_buttons_ignore_stray_ticks(self):
+        """Ticks only count for the «send ticked» button; the class send stays a class send."""
+
+        self.client.post(
+            self.url, {"module": self.module.pk, "send": "1", "students": ["2А|Мария Иванова"]}
+        )
+
+        self.assertEqual(self.started[0][1]["students"], [])

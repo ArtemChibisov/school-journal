@@ -38,8 +38,12 @@
         <a href="{% url 'pipeline:parent_mail_settings' %}">«Почта для родителей»</a>.
       </p>
 
-      <form method="post" class="row g-3">
+      <form method="post" class="row g-3" id="parent-reports-form">
         {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors|join:" " }}</div></div>
+        {% endif %}
 
         <div class="col-12 col-md-6 col-xl-4">
           <label class="form-label" for="{{ form.module.id_for_label }}">{{ form.module.label }}</label>
@@ -116,6 +120,12 @@
       </div>
     {% endif %}
 
+    {% if is_send and picked_count %}
+      <div class="alert alert-secondary">
+        Рассылка только отмеченным ученикам: {{ picked_count }}. Остальные ученики классов не затронуты.
+      </div>
+    {% endif %}
+
     <div class="row g-3 mb-4">
       <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Учеников</div><div class="display-6">{{ summary.students_total }}</div></div></div></div>
       <div class="col-6 col-xl-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Готовы к отправке</div><div class="display-6 text-success">{{ summary.ready }}</div></div></div></div>
@@ -133,6 +143,26 @@
       <div class="alert alert-danger">Не удалось отправить писем: {{ summary.failed }}. Подробности — в журнале запуска.</div>
     {% endif %}
 
+    {% if can_pick and rows %}
+      <p class="form-text mb-2">
+        Чтобы отправить не всему классу, отметьте учеников в таблицах. Отметить можно только
+        учеников с PDF и адресом. Письма уйдут по настройкам формы выше: модуль, адрес для проверки,
+        повторная отправка; классы и параллели в форме не учитываются. Если только что добавили
+        адрес или PDF, сначала нажмите «Проверить, кому уйдёт».
+      </p>
+      <section class="card mb-3 sticky-top" id="pick-bar">
+        <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+          <span class="me-1">Отметить:</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-pick="unsent">кому ещё не отправляли</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-pick="all">всех готовых</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-pick="none">снять отметки</button>
+          <button class="btn btn-sm btn-danger ms-auto" type="submit" name="send_selected" value="1" form="parent-reports-form">
+            Отправить отмеченным (<span data-picked-count>0</span>)
+          </button>
+        </div>
+      </section>
+    {% endif %}
+
     {% for row in rows %}
       <section class="card mb-3">
         <div class="card-body">
@@ -145,6 +175,7 @@
               <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                   <tr>
+                    {% if can_pick %}<th style="width: 2rem;"></th>{% endif %}
                     <th>Ученик</th>
                     <th>Кому уйдёт</th>
                     <th style="width: 14rem;">Что не так</th>
@@ -153,6 +184,17 @@
                 <tbody>
                   {% for student in row.students %}
                     <tr>
+                      {% if can_pick %}
+                        <td>
+                          {% if student.file_id and student.emails %}
+                            <input class="form-check-input" type="checkbox" name="students"
+                                   form="parent-reports-form"
+                                   value="{{ row.class_code }}|{{ student.student }}"
+                                   aria-label="Отправить: {{ row.class_code }} {{ student.student }}"
+                                   data-unsent="{% if student.sent|length < student.emails|length %}1{% else %}0{% endif %}">
+                          {% endif %}
+                        </td>
+                      {% endif %}
                       <td>{{ student.student }}</td>
                       <td class="small">
                         {% for email in student.emails %}
@@ -174,5 +216,30 @@
         </div>
       </section>
     {% endfor %}
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if can_pick %}
+    <script>
+      (function () {
+        const boxes = Array.from(document.querySelectorAll('input[name="students"][form="parent-reports-form"]'));
+        const counter = document.querySelector("[data-picked-count]");
+        const recount = () => {
+          if (counter) counter.textContent = boxes.filter((box) => box.checked).length;
+        };
+        document.querySelectorAll("[data-pick]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const mode = button.dataset.pick;
+            boxes.forEach((box) => {
+              box.checked = mode === "all" || (mode === "unsent" && box.dataset.unsent === "1");
+            });
+            recount();
+          });
+        });
+        boxes.forEach((box) => box.addEventListener("change", recount));
+        recount();
+      })();
+    </script>
   {% endif %}
 {% endblock %}
