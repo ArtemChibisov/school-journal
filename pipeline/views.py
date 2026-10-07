@@ -266,8 +266,12 @@ def parent_reports(request):
         if not request.user.has_perm("jobs.run_full_pipeline"):
             return HttpResponse("forbidden", status=403)
         form = ParentReportsForm(request.POST)
+        picking = "send_selected" in request.POST
+        if form.is_valid() and picking and not form.cleaned_data.get("students"):
+            form.add_error(None, "Отметьте в таблице учеников, которым отправить.")
         if form.is_valid():
-            sending = "send" in request.POST
+            sending = picking or "send" in request.POST
+            students = form.cleaned_data.get("students") if picking else []
             job_run = enqueue(
                 JOB_TYPE_SEND if sending else JOB_TYPE_CHECK,
                 module=form.cleaned_data["module"],
@@ -275,12 +279,16 @@ def parent_reports(request):
                 parallels=form.cleaned_data.get("parallels") or None,
                 resend=bool(form.cleaned_data.get("resend")),
                 test_address=form.cleaned_data.get("test_address") or "",
+                students=students,
                 initiated_by=request.user if request.user.is_authenticated else None,
             )
-            messages.success(
-                request,
-                "Рассылка запущена." if sending else "Проверка запущена — ничего не отправлено.",
-            )
+            if picking:
+                notice = f"Рассылка отмеченным запущена: учеников — {len(students)}."
+            elif sending:
+                notice = "Рассылка запущена."
+            else:
+                notice = "Проверка запущена — ничего не отправлено."
+            messages.success(request, notice)
             return redirect(f"{reverse('pipeline:parent_reports')}?run_id={job_run.id}")
     else:
         form = ParentReportsForm()
@@ -296,6 +304,7 @@ def parent_reports(request):
         )
 
     result = job_run.result_json if job_run and isinstance(job_run.result_json, dict) else {}
+    params = job_run.params_json if job_run and isinstance(job_run.params_json, dict) else {}
     return render(
         request,
         "pipeline/parent_reports.html",
@@ -306,6 +315,12 @@ def parent_reports(request):
             "rows": result.get("classes") or [],
             "test_address": result.get("test_address") or "",
             "is_send": bool(job_run and job_run.job_type == JOB_TYPE_SEND),
+            "picked_count": len(params.get("students") or []),
+            "can_pick": bool(
+                job_run
+                and job_run.status not in (JobRun.Status.PENDING, JobRun.Status.RUNNING)
+                and request.user.has_perm("jobs.run_full_pipeline")
+            ),
             "mail": mail_status(),
         },
     )
