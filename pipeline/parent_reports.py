@@ -38,6 +38,7 @@ from jobs.services import log_step
 from notifications.models import NotificationEvent
 from school_years.models import ClassGroup, SchoolModule
 from school_years.report_folders import find_report_folder
+from school_years.imports.text import comparison_key
 from school_years.report_targets import docx_target_for_class
 
 from .models import ParentContact
@@ -74,7 +75,7 @@ def _chosen(students: list[str] | None) -> dict[str, set[str]]:
     for item in students or []:
         class_code, _, student = str(item).partition("|")
         if class_code.strip() and student.strip():
-            chosen.setdefault(class_code.strip().casefold(), set()).add(student.strip().casefold())
+            chosen.setdefault(class_code.strip().casefold(), set()).add(comparison_key(student))
     return chosen
 
 
@@ -100,7 +101,7 @@ def _only_chosen(rows: list[dict], chosen: dict[str, set[str]]) -> list[dict]:
             "students": [
                 student
                 for student in row["students"]
-                if student["student"].casefold() in chosen.get(row["class_code"].casefold(), set())
+                if comparison_key(student["student"]) in chosen.get(row["class_code"].casefold(), set())
             ],
         }
         for row in rows
@@ -154,15 +155,19 @@ def scan_class(drive, module: SchoolModule, class_code: str) -> dict:
         for item in drive.list_children(folder.class_folder_id, mime_type=MIME_PDF)
         if item["name"].lower().endswith(".pdf")
     }
+    # Names are compared the way the importers compare them. A report file named
+    # `1А Даниил  Надточий.pdf`, with two spaces, is the same child as the contact
+    # `Даниил Надточий`; comparing the raw text split them into a report «без адреса»
+    # and a family «без PDF», and the family got nothing.
     contacts = {
-        contact.student_name.casefold(): contact
+        comparison_key(contact.student_name): contact
         for contact in ParentContact.objects.filter(class_code__iexact=class_code, is_active=True)
     }
 
     seen: set[str] = set()
     for student, item in sorted(files.items()):
-        contact = contacts.get(student.casefold())
-        seen.add(student.casefold())
+        contact = contacts.get(comparison_key(student))
+        seen.add(comparison_key(student))
         addresses = _recipients(contact)
         row["students"].append(
             {
