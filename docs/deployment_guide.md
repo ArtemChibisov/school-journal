@@ -216,7 +216,7 @@ Configure these GitHub repository variables:
 
 | Name | Current value |
 | --- | --- |
-| `DEPLOY_PATH` | `/opt/school_journal` |
+| `DEPLOY_PATH` | `/home/deploy/school-journal` |
 | `DEPLOY_COMPOSE_FILE` | `docker-compose.server.yml` |
 | `DEPLOY_HEALTH_URL` | `http://195.54.178.243:16472/healthz` |
 
