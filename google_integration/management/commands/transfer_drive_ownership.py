@@ -27,6 +27,9 @@ from google_integration.ownership import (
 STEP_OFFER = "offer"
 STEP_ACCEPT = "accept"
 
+# The report comes at the end, and a run over a few thousand files takes minutes.
+PROGRESS_EVERY = 200
+
 
 def stored_links() -> list[str]:
     """Every Google link the platform keeps: roots, module folders, templates, journals."""
@@ -84,15 +87,20 @@ class Command(BaseCommand):
         roots = self._roots(options["links"])
         self.stdout.write(f"Аккаунт: {signed_in}. Начальных ссылок: {len(roots)}.")
 
+        common = {"dry_run": dry_run, "pause": options["pause"], "progress": self._progress(owner)}
         if step == STEP_OFFER:
-            result = offer_ownership(
-                client, roots, owner=owner, new_owner=new_owner, dry_run=dry_run, pause=options["pause"]
-            )
+            result = offer_ownership(client, roots, owner=owner, new_owner=new_owner, **common)
         else:
-            result = accept_ownership(
-                client, roots, previous_owner=owner, new_owner=new_owner, dry_run=dry_run, pause=options["pause"]
-            )
+            result = accept_ownership(client, roots, previous_owner=owner, new_owner=new_owner, **common)
         self._report(step, result, owner=owner, new_owner=new_owner)
+
+    def _progress(self, owner: str):
+        def report(result: dict) -> None:
+            if result["scanned"] % PROGRESS_EVERY == 0:
+                self.stdout.write(f"  просмотрено {result['scanned']}, принадлежит {owner}: {result['owned']}…")
+                self.stdout.flush()
+
+        return report
 
     def _client(self, token_path: str | None) -> ApiOwnershipClient:
         from googleapiclient.discovery import build

@@ -29,6 +29,7 @@ class FakeOwnershipClient:
         self.permissions: dict[str, list[dict]] = {}
         self.refuse: set[str] = set()
         self.calls: list[tuple] = []
+        self.fetched: list[str] = []
 
     def add(self, file_id, *, owner=OLD, parent=None, folder=False):
         self.files[file_id] = {
@@ -51,12 +52,16 @@ class FakeOwnershipClient:
         return {"emailAddress": OLD}
 
     def get_file(self, file_id):
+        self.fetched.append(file_id)
+        return self._item(file_id)
+
+    def _item(self, file_id):
         if file_id not in self.files:
             raise GoogleIntegrationError(CATEGORY_NOT_FOUND, f"{file_id} not found")
         return {key: value for key, value in self.files[file_id].items() if key != "parents"}
 
     def list_children(self, folder_id):
-        return [self.get_file(i) for i, item in self.files.items() if folder_id in item["parents"]]
+        return [self._item(i) for i, item in self.files.items() if folder_id in item["parents"]]
 
     def list_permissions(self, file_id):
         return [dict(p) for p in self.permissions[file_id]]
@@ -165,6 +170,18 @@ class OfferTests(TransferTestCase):
 
         self.assertEqual([error["id"] for error in result["errors"]], ["gone"])
         self.assertEqual(self.statuses(result)[self.report], STATUS_OFFERED)
+
+    def test_only_the_roots_are_fetched_one_by_one(self):
+        self.offer()
+
+        self.assertEqual(self.drive.fetched, [self.root])
+
+    def test_progress_is_reported_for_every_item_seen(self):
+        seen = []
+
+        self.offer(progress=lambda result: seen.append(result["scanned"]))
+
+        self.assertEqual(seen, [1, 2, 3, 4])
 
     def test_an_item_reached_twice_is_handled_once(self):
         result = offer_ownership(self.drive, [self.root, self.module, self.report], owner=OLD, new_owner=NEW)

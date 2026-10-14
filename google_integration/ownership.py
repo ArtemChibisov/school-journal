@@ -20,7 +20,7 @@ is skipped, which is also how a run cut short by Google's limits is finished.
 from __future__ import annotations
 
 import time
-from typing import Iterator, Protocol
+from typing import Callable, Iterator, Protocol
 
 from .api import guard
 from .drive import MIME_FOLDER
@@ -153,22 +153,23 @@ def walk(client: OwnershipClient, root_ids: list[str], errors: list[dict]) -> It
     """
 
     seen: set[str] = set()
-    pending = list(root_ids)
+    pending: list[str | dict] = list(root_ids)
     while pending:
-        file_id = pending.pop()
+        entry = pending.pop()
+        file_id = entry if isinstance(entry, str) else entry["id"]
         if file_id in seen:
             continue
         seen.add(file_id)
         try:
-            item = client.get_file(file_id)
+            # A child comes out of its folder's listing with everything the walk needs; only a
+            # root has to be fetched. A request per file would double a run over thousands.
+            item = client.get_file(file_id) if isinstance(entry, str) else entry
             children = client.list_children(file_id) if item["mimeType"] == MIME_FOLDER else []
         except GoogleIntegrationError as exc:
             errors.append({"id": file_id, "name": "", "error": exc.technical_message})
             continue
         yield item
-        for child in children:
-            if child["id"] not in seen:
-                pending.append(child["id"])
+        pending.extend(child for child in children if child["id"] not in seen)
 
 
 def _result(dry_run: bool) -> dict:
@@ -183,15 +184,19 @@ def offer_ownership(
     new_owner: str,
     dry_run: bool = False,
     pause: float = 0.0,
+    progress: Callable[[dict], None] | None = None,
 ) -> dict:
     """Make `new_owner` the pending owner of everything under the roots that `owner` owns."""
 
     result = _result(dry_run)
     for item in walk(client, root_ids, result["errors"]):
         result["scanned"] += 1
-        if not _owned_by(item, owner):
+        owned = _owned_by(item, owner)
+        result["owned"] += owned
+        if progress:
+            progress(result)
+        if not owned:
             continue
-        result["owned"] += 1
 
         row = {"id": item["id"], "name": item["name"], "mimeType": item["mimeType"]}
         try:
@@ -221,6 +226,7 @@ def accept_ownership(
     new_owner: str,
     dry_run: bool = False,
     pause: float = 0.0,
+    progress: Callable[[dict], None] | None = None,
 ) -> dict:
     """As `new_owner`, accept every pending item under the roots that `previous_owner` owns.
 
@@ -231,9 +237,12 @@ def accept_ownership(
     result = _result(dry_run)
     for item in walk(client, root_ids, result["errors"]):
         result["scanned"] += 1
-        if not _owned_by(item, previous_owner):
+        owned = _owned_by(item, previous_owner)
+        result["owned"] += owned
+        if progress:
+            progress(result)
+        if not owned:
             continue
-        result["owned"] += 1
 
         row = {"id": item["id"], "name": item["name"], "mimeType": item["mimeType"]}
         try:
