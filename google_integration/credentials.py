@@ -66,6 +66,17 @@ def _require(path: Path, env_name: str) -> Path:
 def _oauth_owner_credentials(scopes: tuple[str, ...]):
     token_path = _require(get_google_oauth_token_path(), "GOOGLE_OAUTH_TOKEN_PATH")
     _require(get_google_oauth_client_secret_path(), "GOOGLE_OAUTH_CLIENT_SECRET_PATH")
+    return oauth_token_credentials(token_path, scopes)
+
+
+def oauth_token_credentials(token_path: Path, scopes: tuple[str, ...] = DEFAULT_SCOPES):
+    """Credentials from one saved OAuth token, whichever account it belongs to.
+
+    The environment names a single token. A job that has to act as two accounts in turn - handing
+    files from one to the other - names the second token itself.
+    """
+
+    token_path = _require(Path(token_path), "OAuth token")
 
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
